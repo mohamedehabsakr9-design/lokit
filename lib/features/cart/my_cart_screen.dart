@@ -32,10 +32,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
     setState(() => loading = true);
 
     try {
-      final data = await ApiService.get(
-        '/cart',
-        withAuth: true,
-      );
+      final data = await ApiService.get('/cart', withAuth: true);
 
       if (!mounted) return;
 
@@ -49,9 +46,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
       setState(() => loading = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     }
   }
@@ -79,15 +74,9 @@ class _MyCartScreenState extends State<MyCartScreen> {
 
     try {
       try {
-        await ApiService.delete(
-          '/cart/items/$itemId',
-          withAuth: true,
-        );
+        await ApiService.delete('/cart/items/$itemId', withAuth: true);
       } catch (_) {
-        await ApiService.delete(
-          '/cart-item/$itemId',
-          withAuth: true,
-        );
+        await ApiService.delete('/cart-item/$itemId', withAuth: true);
       }
 
       if (!mounted) return;
@@ -103,9 +92,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(e.toString().replaceFirst('Exception: ', '')),
-        ),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
     } finally {
       if (mounted) setState(() => deleting = false);
@@ -121,7 +108,6 @@ class _MyCartScreenState extends State<MyCartScreen> {
         item['cart_item_id'];
 
     if (id is int) return id;
-
     return int.tryParse(id?.toString() ?? '') ?? 0;
   }
 
@@ -281,10 +267,7 @@ class _MyCartScreenState extends State<MyCartScreen> {
         bottomNavigationBar: SafeArea(
           child: Container(
             margin: const EdgeInsets.all(16),
-            padding: const EdgeInsets.symmetric(
-              horizontal: 24,
-              vertical: 12,
-            ),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(28),
@@ -378,4 +361,169 @@ class _CartItemCard extends StatelessWidget {
     );
     final quantity = _toInt(_read(item, 'quantity') ?? _read(item, 'qty') ?? 1);
 
-    return Container
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(16),
+            child: SizedBox(
+              width: 90,
+              height: 110,
+              child: image.isEmpty
+                  ? _imagePlaceholder()
+                  : Image.network(
+                      image,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _imagePlaceholder(),
+                    ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  name,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  brand,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(color: Colors.grey.shade500),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${price.toStringAsFixed(2)} EGP',
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 6,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[100],
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Text('Qty: $quantity'),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      onPressed: onDelete,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Icon(Icons.image),
+    );
+  }
+}
+
+dynamic _read(dynamic item, String key) {
+  if (item is Map) return item[key];
+  return null;
+}
+
+dynamic _readProduct(dynamic item, String key) {
+  if (item is Map && item['product'] is Map) {
+    return item['product'][key];
+  }
+  return null;
+}
+
+String _text(dynamic value, {String fallback = ''}) {
+  final text = value?.toString() ?? '';
+  return text.trim().isEmpty ? fallback : text;
+}
+
+double _toDouble(dynamic value) {
+  if (value is num) return value.toDouble();
+  return double.tryParse(value?.toString() ?? '') ?? 0;
+}
+
+int _toInt(dynamic value) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? 1;
+}
+
+String _imageUrl(dynamic item) {
+  final raw = _read(item, 'imageUrl') ??
+      _read(item, 'productImage') ??
+      _read(item, 'image') ??
+      _readProduct(item, 'imageUrl') ??
+      _readProduct(item, 'productImage') ??
+      _readProduct(item, 'image') ??
+      '';
+
+  final url = raw.toString();
+
+  if (url.isEmpty) return '';
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return '$kBaseUrl$url';
+  return '$kBaseUrl/$url';
+}
+
+class _NavItem extends StatelessWidget {
+  final IconData icon;
+  final bool active;
+  final VoidCallback onTap;
+
+  const _NavItem({
+    required this.icon,
+    required this.onTap,
+    this.active = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(20),
+      onTap: onTap,
+      child: Icon(
+        icon,
+        color: active ? Colors.black : Colors.grey,
+      ),
+    );
+  }
+}

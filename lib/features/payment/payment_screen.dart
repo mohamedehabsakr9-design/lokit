@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../app/app_strings.dart';
 import '../../services/api_service.dart';
 import '../orders/my_orders_screen.dart';
@@ -57,9 +58,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() => _isLoading = false);
-
       _showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
     }
   }
@@ -78,13 +77,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     for (final item in cartItems) {
       final price = _toDouble(
-        item['price'] ??
-            item['unitPrice'] ??
-            item['productPrice'] ??
-            item['product']?['price'],
+        _read(item, 'price') ??
+            _read(item, 'unitPrice') ??
+            _read(item, 'productPrice') ??
+            _readProduct(item, 'price'),
       );
 
-      final quantity = _toInt(item['quantity'] ?? item['qty'] ?? 1);
+      final quantity = _toInt(
+        _read(item, 'quantity') ?? _read(item, 'qty') ?? 1,
+      );
 
       total += price * quantity;
     }
@@ -123,19 +124,37 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
     setState(() => _isConfirming = true);
 
+    final body = {
+      'fullName': fullName,
+      'phone': phone,
+      'address': address,
+      'city': city,
+      'postalCode': postal,
+      'paymentMethod': paymentMethod,
+      'items': cartItems.map((item) {
+        return {
+          'productVariantId': _extractVariantId(item),
+          'quantity': _toInt(_read(item, 'quantity') ?? _read(item, 'qty') ?? 1),
+        };
+      }).toList(),
+    };
+
     try {
-      final response = await ApiService.post(
-        '/checkout',
-        {
-          'fullName': fullName,
-          'phone': phone,
-          'address': address,
-          'city': city,
-          'postalCode': postal,
-          'paymentMethod': paymentMethod,
-        },
-        withAuth: true,
-      );
+      dynamic response;
+
+      try {
+        response = await ApiService.post(
+          '/checkout',
+          body: body,
+          withAuth: true,
+        );
+      } catch (_) {
+        response = await ApiService.post(
+          '/orders',
+          body: body,
+          withAuth: true,
+        );
+      }
 
       if (!mounted) return;
 
@@ -160,11 +179,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       }
     } catch (e) {
       if (!mounted) return;
-
-      _showMessage(
-        e.toString().replaceFirst('Exception: ', ''),
-        isError: true,
-      );
+      _showMessage(e.toString().replaceFirst('Exception: ', ''), isError: true);
     } finally {
       if (mounted) setState(() => _isConfirming = false);
     }
@@ -172,11 +187,14 @@ class _PaymentScreenState extends State<PaymentScreen> {
 
   String _extractOrderId(dynamic response) {
     if (response is Map) {
+      final data = response['data'];
+
       final id = response['id'] ??
           response['orderId'] ??
           response['orderNumber'] ??
-          response['data']?['id'] ??
-          response['data']?['orderId'];
+          (data is Map ? data['id'] : null) ??
+          (data is Map ? data['orderId'] : null) ??
+          (data is Map ? data['orderNumber'] : null);
 
       if (id != null) {
         final value = id.toString();
@@ -236,16 +254,12 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         children: [
                           const _StepCircle(isActive: true),
                           Expanded(
-                            child: Container(
-                              height: 2,
-                              color: Colors.grey[300],
-                            ),
+                            child: Container(height: 2, color: Colors.grey[300]),
                           ),
                           const _StepCircle(isActive: true),
                         ],
                       ),
                       const SizedBox(height: 16),
-
                       Text(
                         s.paymentOrderSummary,
                         style: const TextStyle(
@@ -254,7 +268,6 @@ class _PaymentScreenState extends State<PaymentScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-
                       if (cartItems.isEmpty)
                         Container(
                           width: double.infinity,
@@ -263,20 +276,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             color: const Color(0xFFF7F7F7),
                             borderRadius: BorderRadius.circular(16),
                           ),
-                          child: const Center(
-                            child: Text('Cart is empty'),
-                          ),
+                          child: const Center(child: Text('Cart is empty')),
                         )
                       else
-                        ...cartItems.map((item) {
-                          return Padding(
+                        ...cartItems.map(
+                          (item) => Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _SummaryItemCard(item: item),
-                          );
-                        }),
-
+                          ),
+                        ),
                       const SizedBox(height: 12),
-
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
@@ -292,8 +301,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             const SizedBox(height: 4),
                             _TotalRow(
                               label: 'Shipment total',
-                              value:
-                                  '${shipmentTotal.toStringAsFixed(2)} EGP',
+                              value: '${shipmentTotal.toStringAsFixed(2)} EGP',
                             ),
                             const Divider(height: 20),
                             _TotalRow(
@@ -303,44 +311,34 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 20),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              s.paymentDeliveryInfoTitle,
-                              style: const TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                          const Icon(Icons.edit_outlined, size: 18),
-                        ],
+                      Text(
+                        s.paymentDeliveryInfoTitle,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
-                      const SizedBox(height: 10),
-
+                      const SizedBox(height: 12),
                       _TextField(
                         hint: s.paymentFullNameHint,
                         controller: fullNameController,
                         enabled: !_isConfirming,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       _TextField(
                         hint: s.paymentPhoneHint,
                         controller: phoneController,
                         keyboardType: TextInputType.phone,
                         enabled: !_isConfirming,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       _TextField(
                         hint: s.paymentAddressHint,
                         controller: addressController,
                         enabled: !_isConfirming,
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 10),
                       Row(
                         children: [
                           Expanded(
@@ -355,14 +353,13 @@ class _PaymentScreenState extends State<PaymentScreen> {
                             child: _TextField(
                               hint: s.paymentPostalHint,
                               controller: postalController,
+                              keyboardType: TextInputType.number,
                               enabled: !_isConfirming,
                             ),
                           ),
                         ],
                       ),
-
                       const SizedBox(height: 20),
-
                       Text(
                         s.paymentMethodTitle,
                         style: const TextStyle(
@@ -370,60 +367,44 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           fontWeight: FontWeight.w700,
                         ),
                       ),
-                      const SizedBox(height: 8),
-
-                      Row(
-                        children: [
-                          Expanded(
-                            child: RadioListTile<String>(
-                              value: 'CASH_ON_DELIVERY',
-                              groupValue: paymentMethod,
-                              onChanged: _isConfirming
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        paymentMethod = value!;
-                                      });
-                                    },
-                              title: Text(s.paymentCashOnDelivery),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                          Expanded(
-                            child: RadioListTile<String>(
-                              value: 'CARD',
-                              groupValue: paymentMethod,
-                              onChanged: _isConfirming
-                                  ? null
-                                  : (value) {
-                                      setState(() {
-                                        paymentMethod = value!;
-                                      });
-                                    },
-                              title: Text(s.paymentCreditCard),
-                              contentPadding: EdgeInsets.zero,
-                            ),
-                          ),
-                        ],
+                      const SizedBox(height: 12),
+                      _PaymentOption(
+                        title: s.paymentCashOnDelivery,
+                        value: 'CASH_ON_DELIVERY',
+                        groupValue: paymentMethod,
+                        onChanged: _isConfirming
+                            ? null
+                            : (value) {
+                                setState(() => paymentMethod = value);
+                              },
                       ),
-
+                      _PaymentOption(
+                        title: s.paymentCreditCard,
+                        value: 'CARD',
+                        groupValue: paymentMethod,
+                        onChanged: _isConfirming
+                            ? null
+                            : (value) {
+                                setState(() => paymentMethod = value);
+                              },
+                      ),
                       if (paymentMethod == 'CARD') ...[
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         Text(
                           s.paymentCardDetailsTitle,
                           style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 12),
                         _TextField(
                           hint: s.paymentCardNumberHint,
                           controller: cardNumberController,
                           keyboardType: TextInputType.number,
                           enabled: !_isConfirming,
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 10),
                         Row(
                           children: [
                             Expanded(
@@ -445,9 +426,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                           ],
                         ),
                       ],
-
                       const SizedBox(height: 20),
-
                       SizedBox(
                         width: double.infinity,
                         height: 52,
@@ -489,6 +468,32 @@ class _PaymentScreenState extends State<PaymentScreen> {
   }
 }
 
+class _PaymentOption extends StatelessWidget {
+  final String title;
+  final String value;
+  final String groupValue;
+  final ValueChanged<String>? onChanged;
+
+  const _PaymentOption({
+    required this.title,
+    required this.value,
+    required this.groupValue,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return RadioListTile<String>(
+      value: value,
+      groupValue: groupValue,
+      onChanged: onChanged == null ? null : (v) => onChanged!(v!),
+      title: Text(title),
+      activeColor: Colors.black,
+      contentPadding: EdgeInsets.zero,
+    );
+  }
+}
+
 class _StepCircle extends StatelessWidget {
   final bool isActive;
 
@@ -515,26 +520,24 @@ class _SummaryItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final name = _readString('productName').isNotEmpty
-        ? _readString('productName')
-        : _readStringFromProduct('name').isNotEmpty
-            ? _readStringFromProduct('name')
-            : 'Product';
-
-    final brand = _readString('brandName').isNotEmpty
-        ? _readString('brandName')
-        : _readStringFromProduct('brandName');
-
-    final price = _toDouble(
-      _readDynamic('price') ??
-          _readDynamic('unitPrice') ??
-          _readDynamic('productPrice') ??
-          _readDynamicFromProduct('price'),
+    final name = _text(
+      _read(item, 'productName') ?? _readProduct(item, 'name'),
+      fallback: 'Product',
     );
 
-    final quantity = _toInt(_readDynamic('quantity') ?? _readDynamic('qty') ?? 1);
+    final brand = _text(
+      _read(item, 'brandName') ?? _readProduct(item, 'brandName'),
+    );
 
-    final imageUrl = _imageUrl();
+    final price = _toDouble(
+      _read(item, 'price') ??
+          _read(item, 'unitPrice') ??
+          _read(item, 'productPrice') ??
+          _readProduct(item, 'price'),
+    );
+
+    final quantity = _toInt(_read(item, 'quantity') ?? _read(item, 'qty') ?? 1);
+    final imageUrl = _imageUrl(item);
 
     return Container(
       height: 90,
@@ -558,7 +561,7 @@ class _SummaryItemCard extends StatelessWidget {
             child: SizedBox(
               width: 90,
               height: 90,
-              child: imageUrl == null
+              child: imageUrl.isEmpty
                   ? _imagePlaceholder()
                   : Image.network(
                       imageUrl,
@@ -620,50 +623,6 @@ class _SummaryItemCard extends StatelessWidget {
     );
   }
 
-  dynamic _readDynamic(String key) {
-    if (item is Map && item[key] != null) return item[key];
-    return null;
-  }
-
-  dynamic _readDynamicFromProduct(String key) {
-    if (item is Map && item['product'] is Map) {
-      return item['product'][key];
-    }
-    return null;
-  }
-
-  String _readString(String key) {
-    final value = _readDynamic(key);
-    if (value == null) return '';
-    return value.toString();
-  }
-
-  String _readStringFromProduct(String key) {
-    final value = _readDynamicFromProduct(key);
-    if (value == null) return '';
-    return value.toString();
-  }
-
-  String? _imageUrl() {
-    final direct = _readString('imageUrl').isNotEmpty
-        ? _readString('imageUrl')
-        : _readString('productImage');
-
-    if (direct.isNotEmpty) return _fullImageUrl(direct);
-
-    final product = item is Map ? item['product'] : null;
-
-    if (product is Map) {
-      final image = product['imageUrl'] ?? product['mainImageUrl'];
-
-      if (image != null && image.toString().isNotEmpty) {
-        return _fullImageUrl(image.toString());
-      }
-    }
-
-    return null;
-  }
-
   Widget _imagePlaceholder() {
     return Container(
       color: Colors.grey[300],
@@ -671,15 +630,6 @@ class _SummaryItemCard extends StatelessWidget {
         child: Icon(Icons.image_outlined, color: Colors.grey),
       ),
     );
-  }
-
-  String _fullImageUrl(String url) {
-    if (url.isEmpty) return '';
-    if (url.startsWith('http')) return url;
-    if (url.startsWith('/')) {
-      return 'https://lokit-production.up.railway.app$url';
-    }
-    return 'https://lokit-production.up.railway.app/$url';
   }
 }
 
@@ -837,6 +787,23 @@ Future<bool?> showOrderConfirmedDialog(
   );
 }
 
+dynamic _read(dynamic item, String key) {
+  if (item is Map) return item[key];
+  return null;
+}
+
+dynamic _readProduct(dynamic item, String key) {
+  if (item is Map && item['product'] is Map) {
+    return item['product'][key];
+  }
+  return null;
+}
+
+String _text(dynamic value, {String fallback = ''}) {
+  final text = value?.toString() ?? '';
+  return text.trim().isEmpty ? fallback : text;
+}
+
 double _toDouble(dynamic value) {
   if (value is num) return value.toDouble();
   return double.tryParse(value?.toString() ?? '') ?? 0;
@@ -845,4 +812,36 @@ double _toDouble(dynamic value) {
 int _toInt(dynamic value) {
   if (value is int) return value;
   return int.tryParse(value?.toString() ?? '') ?? 1;
+}
+
+int _extractVariantId(dynamic item) {
+  final id = _read(item, 'productVariantId') ??
+      _read(item, 'variantId') ??
+      _read(item, 'variant_id') ??
+      _readProduct(item, 'variantId') ??
+      _readProduct(item, 'productVariantId') ??
+      _read(item, 'id');
+
+  if (id is int) return id;
+  return int.tryParse(id?.toString() ?? '') ?? 0;
+}
+
+String _imageUrl(dynamic item) {
+  final raw = _read(item, 'imageUrl') ??
+      _read(item, 'productImage') ??
+      _read(item, 'image') ??
+      _readProduct(item, 'imageUrl') ??
+      _readProduct(item, 'mainImageUrl') ??
+      _readProduct(item, 'productImage') ??
+      _readProduct(item, 'image') ??
+      '';
+
+  final url = raw.toString();
+
+  if (url.isEmpty) return '';
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) {
+    return 'https://lokit-production.up.railway.app$url';
+  }
+  return 'https://lokit-production.up.railway.app/$url';
 }

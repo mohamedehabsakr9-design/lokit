@@ -1,5 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
 import '../../app/app_strings.dart';
 import '../../core/models/product_search_model.dart';
 import '../../core/services/search_service.dart';
@@ -88,12 +89,15 @@ class _SearchScreenState extends State<SearchScreen> {
     } on DioException catch (e) {
       if (!mounted) return;
 
+      final message = e.response?.data is Map
+          ? e.response?.data['message']?.toString()
+          : null;
+
       setState(() {
         _isLoading = false;
         _hasSearched = true;
-        _errorMessage = e.response?.data is Map
-            ? e.response?.data['message']?.toString()
-            : 'Connection error. Please try again.';
+        _errorMessage = message?.replaceFirst('Exception: ', '') ??
+            'Connection error. Please try again.';
       });
     } catch (e) {
       if (!mounted) return;
@@ -321,7 +325,7 @@ class _ProductCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final imageUrl = _fullImageUrl(product.imageUrl);
+    final imageUrl = fullImage(product.imageUrl);
 
     return InkWell(
       borderRadius: BorderRadius.circular(22),
@@ -357,7 +361,7 @@ class _ProductCard extends StatelessWidget {
                   child: SizedBox(
                     height: 175,
                     width: double.infinity,
-                    child: imageUrl == null
+                    child: imageUrl.isEmpty
                         ? _placeholder()
                         : Image.network(
                             imageUrl,
@@ -450,13 +454,13 @@ class _ProductCard extends StatelessWidget {
       ),
     );
   }
+}
 
-  String? _fullImageUrl(String? url) {
-    if (url == null || url.isEmpty) return null;
-    if (url.startsWith('http')) return url;
-    if (url.startsWith('/')) return '$kBaseUrl$url';
-    return '$kBaseUrl/$url';
-  }
+String fullImage(String? url) {
+  if (url == null || url.isEmpty) return '';
+  if (url.startsWith('http')) return url;
+  if (url.startsWith('/')) return '$kBaseUrl$url';
+  return '$kBaseUrl/$url';
 }
 
 class _EmptyState extends StatelessWidget {
@@ -491,10 +495,13 @@ class _EmptyState extends StatelessWidget {
         ),
         const SizedBox(height: 16),
         Center(
-          child: Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 24),
+            child: Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.black87),
+            ),
           ),
         ),
       ],

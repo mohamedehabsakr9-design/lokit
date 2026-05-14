@@ -30,6 +30,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> loadProducts() async {
+    setState(() => loading = true);
+
     try {
       final result = await ProductService.getProducts();
 
@@ -42,216 +44,234 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      setState(() {
-        loading = false;
-      });
+      setState(() => loading = false);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to load products: $e')),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
 
   void hideSuccessOverlay() {
-    setState(() {
-      showSuccessOverlay = false;
-    });
+    setState(() => showSuccessOverlay = false);
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF7F7F7),
-      body: SafeArea(
-        child: Stack(
-          children: [
-            RefreshIndicator(
-              onRefresh: loadProducts,
-              child: loading
-                  ? const Center(child: CircularProgressIndicator())
-                  : SingleChildScrollView(
-                      physics: const AlwaysScrollableScrollPhysics(),
-                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _Header(
-                            onSearchChanged: (value) {
-                              setState(() {
-                                searchQuery = value;
-                              });
-                            },
+    return Directionality(
+      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF7F7F7),
+        body: SafeArea(
+          child: Stack(
+            children: [
+              RefreshIndicator(
+                onRefresh: loadProducts,
+                child: loading
+                    ? const Center(child: CircularProgressIndicator())
+                    : products.isEmpty
+                        ? ListView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            children: [
+                              const SizedBox(height: 220),
+                              const Icon(
+                                Icons.inventory_2_outlined,
+                                color: Colors.grey,
+                                size: 52,
+                              ),
+                              const SizedBox(height: 12),
+                              Center(
+                                child: Text(
+                                  isArabic
+                                      ? 'لا توجد منتجات حالياً'
+                                      : 'No products available',
+                                  style: const TextStyle(
+                                    color: Colors.black54,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          )
+                        : SingleChildScrollView(
+                            physics: const AlwaysScrollableScrollPhysics(),
+                            padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _Header(
+                                  onSearchChanged: (value) {
+                                    setState(() => searchQuery = value);
+                                  },
+                                ),
+                                const SizedBox(height: 18),
+                                const _TopBanner(),
+                                const SizedBox(height: 18),
+                                const _BrandRow(),
+                                const SizedBox(height: 24),
+                                _ProductSection(
+                                  title: s.homeNewArrivals,
+                                  products: products,
+                                  searchQuery: searchQuery,
+                                  departmentFilter: departmentFilter,
+                                ),
+                                const SizedBox(height: 24),
+                                _ProductSection(
+                                  title: s.homeRecommended,
+                                  products: products,
+                                  searchQuery: searchQuery,
+                                  departmentFilter: departmentFilter,
+                                ),
+                              ],
+                            ),
                           ),
-                          const SizedBox(height: 18),
-
-                          const _TopBanner(),
-                          const SizedBox(height: 18),
-
-                          const _BrandRow(),
-                          const SizedBox(height: 24),
-
-                          _ProductSection(
-                            title: s.homeNewArrivals,
-                            products: products,
-                            searchQuery: searchQuery,
-                            departmentFilter: departmentFilter,
-                          ),
-
-                          const SizedBox(height: 24),
-
-                          _ProductSection(
-                            title: s.homeRecommended,
-                            products: products,
-                            searchQuery: searchQuery,
-                            departmentFilter: departmentFilter,
-                          ),
-                        ],
-                      ),
+              ),
+              if (showSuccessOverlay)
+                Center(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 32),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 24,
                     ),
-            ),
-
-            if (showSuccessOverlay)
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 32),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 24,
-                    vertical: 24,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.15),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const CircleAvatar(
-                        radius: 30,
-                        backgroundColor: Color(0xFF1BC47D),
-                        child: Icon(
-                          Icons.check,
-                          color: Colors.white,
-                          size: 32,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 12,
+                          offset: const Offset(0, 4),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      Text(
-                        s.homeSuccessTitle,
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        s.homeSuccessBody,
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(
-                          color: Colors.black54,
-                          fontSize: 14,
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 20),
-                      TextButton(
-                        onPressed: hideSuccessOverlay,
-                        child: Text(
-                          s.homeSuccessOk,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            color: Colors.blue,
+                      ],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const CircleAvatar(
+                          radius: 30,
+                          backgroundColor: Color(0xFF1BC47D),
+                          child: Icon(
+                            Icons.check,
+                            color: Colors.white,
+                            size: 32,
                           ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 16),
+                        Text(
+                          s.homeSuccessTitle,
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          s.homeSuccessBody,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontSize: 14,
+                            height: 1.4,
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        TextButton(
+                          onPressed: hideSuccessOverlay,
+                          child: Text(
+                            s.homeSuccessOk,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              color: Colors.blue,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
-          ],
-        ),
-      ),
-      bottomNavigationBar: SafeArea(
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.07),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
             ],
           ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              _BottomItem(
-                icon: Icons.home_filled,
-                label: 'Home',
-                isActive: true,
-                onTap: () {},
-              ),
-              _BottomItem(
-                icon: Icons.search,
-                label: 'Search',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const SearchScreen(),
-                    ),
-                  );
-                },
-              ),
-              _BottomItem(
-                icon: Icons.favorite_border,
-                label: 'Wishlist',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const WishlistScreen(),
-                    ),
-                  );
-                },
-              ),
-              _BottomItem(
-                icon: Icons.shopping_bag_outlined,
-                label: 'Cart',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const MyCartScreen(),
-                    ),
-                  );
-                },
-              ),
-              _BottomItem(
-                icon: Icons.person_outline,
-                label: 'Profile',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => const ProfileMenuScreen(),
-                    ),
-                  );
-                },
-              ),
-            ],
+        ),
+        bottomNavigationBar: SafeArea(
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(30),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.07),
+                  blurRadius: 20,
+                  offset: const Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                _BottomItem(
+                  icon: Icons.home_filled,
+                  label: 'Home',
+                  isActive: true,
+                  onTap: () {},
+                ),
+                _BottomItem(
+                  icon: Icons.search,
+                  label: 'Search',
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const SearchScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _BottomItem(
+                  icon: Icons.favorite_border,
+                  label: 'Wishlist',
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const WishlistScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _BottomItem(
+                  icon: Icons.shopping_bag_outlined,
+                  label: 'Cart',
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const MyCartScreen(),
+                      ),
+                    );
+                  },
+                ),
+                _BottomItem(
+                  icon: Icons.person_outline,
+                  label: 'Profile',
+                  onTap: () {
+                    Navigator.pushReplacement(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ProfileMenuScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -338,6 +358,13 @@ class _TopBanner extends StatelessWidget {
           'lib/assets/Group 3.png',
           fit: BoxFit.cover,
           alignment: Alignment.center,
+          errorBuilder: (_, __, ___) {
+            return Container(
+              color: Colors.grey.shade200,
+              alignment: Alignment.center,
+              child: const Icon(Icons.image_outlined, color: Colors.grey),
+            );
+          },
         ),
       ),
     );
@@ -410,7 +437,6 @@ class _ProductSection extends StatelessWidget {
 
       if (departmentFilter != null && departmentFilter!.isNotEmpty) {
         final f = departmentFilter!.toLowerCase();
-
         final matchedDepartment =
             department.contains(f) || category.contains(f);
 
@@ -470,7 +496,18 @@ class _ProductSection extends StatelessWidget {
                       onTap: () {
                         final productId = _extractProductId(product);
 
-                        if (productId == 0) return;
+                        if (productId == 0) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                s.isArabic
+                                    ? 'لم يتم العثور على المنتج'
+                                    : 'Product id not found',
+                              ),
+                            ),
+                          );
+                          return;
+                        }
 
                         Navigator.push(
                           context,
@@ -511,20 +548,24 @@ class _ProductSection extends StatelessWidget {
   }
 
   static String _extractPrice(dynamic product) {
-    if (product is! Map) return '0 EGP';
+    if (product is! Map) return '0.00 EGP';
 
     final directPrice = product['price'];
-    if (directPrice != null) return '$directPrice EGP';
+    if (directPrice != null) {
+      final value = double.tryParse(directPrice.toString()) ?? 0;
+      return '${value.toStringAsFixed(2)} EGP';
+    }
 
     final variants = product['variants'];
     if (variants is List && variants.isNotEmpty) {
       final firstVariant = variants.first;
       if (firstVariant is Map && firstVariant['price'] != null) {
-        return '${firstVariant['price']} EGP';
+        final value = double.tryParse(firstVariant['price'].toString()) ?? 0;
+        return '${value.toStringAsFixed(2)} EGP';
       }
     }
 
-    return '0 EGP';
+    return '0.00 EGP';
   }
 
   static String? _extractImageUrl(dynamic product) {
@@ -566,15 +607,8 @@ class _ProductSection extends StatelessWidget {
 
   static String _fullImageUrl(String url) {
     if (url.isEmpty) return '';
-
-    if (url.startsWith('http')) {
-      return url;
-    }
-
-    if (url.startsWith('/')) {
-      return '$kBaseUrl$url';
-    }
-
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/')) return '$kBaseUrl$url';
     return '$kBaseUrl/$url';
   }
 }

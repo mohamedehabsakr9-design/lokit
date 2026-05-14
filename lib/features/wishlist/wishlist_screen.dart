@@ -47,18 +47,23 @@ class _WishlistScreenState extends State<WishlistScreen> {
       if (!mounted) return;
 
       setState(() {
-        _error = e.toString();
+        _error = e.toString().replaceFirst('Exception: ', '');
         _isLoading = false;
       });
     }
   }
 
   Future<void> _removeFromWishlist(dynamic item) async {
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
     final productId = _extractProductId(item);
 
     if (productId == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Product id not found')),
+        SnackBar(
+          content: Text(
+            isArabic ? 'لم يتم العثور على المنتج' : 'Product id not found',
+          ),
+        ),
       );
       return;
     }
@@ -75,13 +80,19 @@ class _WishlistScreenState extends State<WishlistScreen> {
       });
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Removed from wishlist')),
+        SnackBar(
+          content: Text(
+            isArabic ? 'تمت الإزالة من المفضلة' : 'Removed from wishlist',
+          ),
+        ),
       );
     } catch (e) {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to remove: $e')),
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+        ),
       );
     }
   }
@@ -207,6 +218,8 @@ class _WishlistScreenState extends State<WishlistScreen> {
   }
 
   Widget _buildBody(AppStrings s) {
+    final isArabic = s.isArabic;
+
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
@@ -218,17 +231,25 @@ class _WishlistScreenState extends State<WishlistScreen> {
           const SizedBox(height: 160),
           const Icon(Icons.error_outline, color: Colors.red, size: 42),
           const SizedBox(height: 12),
-          const Center(
+          Center(
             child: Text(
-              'Failed to load wishlist',
-              style: TextStyle(fontWeight: FontWeight.w600),
+              isArabic ? 'فشل تحميل المفضلة' : 'Failed to load wishlist',
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Center(
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54, fontSize: 12),
             ),
           ),
           const SizedBox(height: 12),
           Center(
             child: ElevatedButton(
               onPressed: _loadWishlist,
-              child: const Text('Try again'),
+              child: Text(isArabic ? 'حاول مرة أخرى' : 'Try again'),
             ),
           ),
         ],
@@ -238,14 +259,14 @@ class _WishlistScreenState extends State<WishlistScreen> {
     if (_wishlistItems.isEmpty) {
       return ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        children: const [
-          SizedBox(height: 160),
-          Icon(Icons.favorite_border, color: Colors.grey, size: 52),
-          SizedBox(height: 12),
+        children: [
+          const SizedBox(height: 160),
+          const Icon(Icons.favorite_border, color: Colors.grey, size: 52),
+          const SizedBox(height: 12),
           Center(
             child: Text(
-              'Your wishlist is empty',
-              style: TextStyle(
+              isArabic ? 'المفضلة فارغة' : 'Your wishlist is empty',
+              style: const TextStyle(
                 fontSize: 15,
                 color: Colors.black54,
                 fontWeight: FontWeight.w500,
@@ -276,7 +297,13 @@ class _WishlistScreenState extends State<WishlistScreen> {
           onTap: () {
             if (productId == 0) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Product id not found')),
+                SnackBar(
+                  content: Text(
+                    isArabic
+                        ? 'لم يتم العثور على المنتج'
+                        : 'Product id not found',
+                  ),
+                ),
               );
               return;
             }

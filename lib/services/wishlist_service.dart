@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 
 import 'api_service.dart';
 
@@ -8,51 +9,30 @@ class WishlistService {
       withAuth: true,
     );
 
-    print('WISHLIST RESPONSE: $data');
+    debugPrint('WISHLIST RESPONSE: $data');
 
-    if (data is List) {
-      return data;
-    }
-
-    if (data is Map && data['content'] is List) {
-      return data['content'];
-    }
-
-    if (data is Map && data['items'] is List) {
-      return data['items'];
-    }
-
-    if (data is Map && data['data'] is List) {
-      return data['data'];
-    }
-
-    if (data is Map && data['wishlist'] is List) {
-      return data['wishlist'];
-    }
-
-    return [];
+    return _extractList(data);
   }
 
   static Future<dynamic> addToWishlist(int productId) async {
     try {
       final response = await ApiService.post(
         '/wishlist',
-        {
+        body: {
           'productId': productId,
         },
         withAuth: true,
       );
 
-      print('ADD TO WISHLIST RESPONSE: $response');
+      debugPrint('ADD TO WISHLIST RESPONSE: $response');
 
       return response;
     } catch (e) {
-      print('ADD TO WISHLIST ERROR: $e');
+      debugPrint('ADD TO WISHLIST ERROR: $e');
 
-      // fallback endpoint
-      return await ApiService.post(
+      return ApiService.post(
         '/wishlist/add',
-        {
+        body: {
           'productId': productId,
         },
         withAuth: true,
@@ -67,9 +47,8 @@ class WishlistService {
         withAuth: true,
       );
     } catch (e) {
-      print('REMOVE WISHLIST ERROR: $e');
+      debugPrint('REMOVE WISHLIST ERROR: $e');
 
-      // fallback endpoint
       await ApiService.delete(
         '/wishlist/remove/$productId',
         withAuth: true,
@@ -81,15 +60,33 @@ class WishlistService {
     final wishlist = await getWishlist();
 
     return wishlist.any((item) {
-      if (item is! Map) return false;
-
-      final id =
-          item['id'] ??
-          item['productId'] ??
-          item['product']?['id'];
-
+      final id = _extractProductId(item);
       return id == productId;
     });
   }
 }
 
+List<dynamic> _extractList(dynamic data) {
+  if (data is List) return data;
+  if (data is Map && data['content'] is List) return data['content'];
+  if (data is Map && data['items'] is List) return data['items'];
+  if (data is Map && data['data'] is List) return data['data'];
+  if (data is Map && data['wishlist'] is List) return data['wishlist'];
+  return [];
+}
+
+int _extractProductId(dynamic item) {
+  if (item is! Map) return 0;
+
+  final product = item['product'];
+
+  final id = item['productId'] ??
+      item['id'] ??
+      item['wishlistProductId'] ??
+      item['product_id'] ??
+      (product is Map ? product['id'] : null);
+
+  if (id is int) return id;
+
+  return int.tryParse(id?.toString() ?? '') ?? 0;
+}

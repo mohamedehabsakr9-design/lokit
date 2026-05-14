@@ -65,7 +65,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
     try {
       await ApiService.patch(
         '/orders/$_cleanOrderId/cancel',
-        {},
+        body: {
+          'status': 'CANCELLED',
+        },
         withAuth: true,
       );
 
@@ -219,7 +221,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                           const SizedBox(height: 16),
                           const Divider(),
                           const SizedBox(height: 8),
-
                           Text(
                             s.orderDetailsSectionTitle,
                             style: const TextStyle(
@@ -228,7 +229,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-
                           _DetailRow(
                             label: s.orderDetailsStatusLabel,
                             value: _status(s),
@@ -263,11 +263,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             icon: Icons.location_on_outlined,
                             isMultiline: true,
                           ),
-
                           const SizedBox(height: 16),
                           const Divider(),
                           const SizedBox(height: 8),
-
                           Text(
                             s.orderDetailsStatusSectionTitle,
                             style: const TextStyle(
@@ -276,7 +274,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             ),
                           ),
                           const SizedBox(height: 12),
-
                           _TimelineItem(
                             dateText: _date(),
                             title: s.timelineConfirmedTitle,
@@ -302,11 +299,9 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             icon: Icons.delivery_dining_outlined,
                             iconColor: completed ? Colors.green : Colors.grey,
                           ),
-
                           const SizedBox(height: 16),
                           const Divider(),
                           const SizedBox(height: 8),
-
                           if (completed) ...[
                             _RateOrderSection(s: s),
                             const SizedBox(height: 16),
@@ -318,7 +313,6 @@ class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
                             ),
                             const SizedBox(height: 16),
                           ],
-
                           if (completed) ...[
                             const Divider(),
                             const SizedBox(height: 8),
@@ -630,6 +624,7 @@ class _RateOrderSection extends StatelessWidget {
           child: TextButton(
             onPressed: () async {
               final result = await showRateExperienceDialog(context, s);
+
               if (result != null && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

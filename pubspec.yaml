@@ -1,5 +1,5 @@
 name: lokit_app
-description: "A new Flutter project."
+description: "Lokit Flutter application."
 publish_to: 'none'
 
 version: 1.0.0+1
@@ -10,19 +10,19 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.2.2
-  cupertino_icons: ^1.0.8
+
   flutter_localizations:
     sdk: flutter
 
+  cupertino_icons: ^1.0.8
   dio: ^5.4.0
   shared_preferences: ^2.3.2
+  http: ^1.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-
   flutter_launcher_icons: ^0.13.1
 
 flutter:
@@ -38,6 +38,7 @@ flutter:
     - lib/assets/Group 1171278176.png
     - lib/assets/rafiki.png
     - lib/assets/icon .png
+
 flutter_launcher_icons:
   android: true
   ios: true

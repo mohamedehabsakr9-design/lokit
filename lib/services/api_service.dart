@@ -29,11 +29,13 @@ class ApiService {
   }
 
   static Future<void> saveToken(String token) async {
+    final cleanToken = token.replaceFirst('Bearer ', '').trim();
+
     final prefs = await SharedPreferences.getInstance();
 
-    await prefs.setString('token', token);
-    await prefs.setString('jwt', token);
-    await prefs.setString('accessToken', token);
+    await prefs.setString('token', cleanToken);
+    await prefs.setString('jwt', cleanToken);
+    await prefs.setString('accessToken', cleanToken);
   }
 
   static Future<void> clearToken() async {
@@ -50,8 +52,10 @@ class ApiService {
     debugPrint('Has Token: ${token != null && token.isNotEmpty}');
 
     if (token != null && token.isNotEmpty) {
+      final cleanToken = token.replaceFirst('Bearer ', '').trim();
+
       return {
-        'Authorization': 'Bearer $token',
+        'Authorization': 'Bearer $cleanToken',
       };
     }
 
@@ -79,8 +83,8 @@ class ApiService {
   }
 
   static Future<dynamic> post(
-    String endpoint,
-    Map<String, dynamic>? body, {
+    String endpoint, {
+    Map<String, dynamic>? body,
     bool withAuth = false,
   }) async {
     try {
@@ -99,8 +103,8 @@ class ApiService {
   }
 
   static Future<dynamic> put(
-    String endpoint,
-    Map<String, dynamic>? body, {
+    String endpoint, {
+    Map<String, dynamic>? body,
     bool withAuth = false,
   }) async {
     try {
@@ -119,8 +123,8 @@ class ApiService {
   }
 
   static Future<dynamic> patch(
-    String endpoint,
-    Map<String, dynamic>? body, {
+    String endpoint, {
+    Map<String, dynamic>? body,
     bool withAuth = false,
   }) async {
     try {

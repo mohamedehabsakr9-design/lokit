@@ -8,7 +8,7 @@ class AuthService {
   }) async {
     final data = await ApiService.post(
       '/auth/login',
-      {
+      body: {
         'email': email.trim(),
         'password': password,
       },
@@ -39,7 +39,7 @@ class AuthService {
   }) async {
     final data = await ApiService.post(
       '/auth/register',
-      {
+      body: {
         'firstName': firstName.trim(),
         'lastName': lastName.trim(),
         'email': email.trim(),
@@ -75,7 +75,7 @@ class AuthService {
 
     return ApiService.patch(
       '/account/password',
-      {
+      body: {
         'oldPassword': oldPassword,
         'newPassword': newPassword,
         'confirmNewPassword': confirmNewPassword,
@@ -90,7 +90,7 @@ class AuthService {
     try {
       final response = await ApiService.post(
         '/auth/forgot-password',
-        {
+        body: {
           'email': email.trim(),
         },
       );
@@ -109,7 +109,7 @@ class AuthService {
     try {
       final response = await ApiService.post(
         '/auth/verify-reset-code',
-        {
+        body: {
           'email': email.trim(),
           'code': code.trim(),
         },
@@ -130,7 +130,7 @@ class AuthService {
     try {
       final response = await ApiService.post(
         '/auth/reset-password',
-        {
+        body: {
           'email': email.trim(),
           'otp': otp.trim(),
           'newPassword': newPassword,
@@ -162,7 +162,7 @@ class AuthService {
     if (data == null) return null;
 
     if (data is String && data.isNotEmpty) {
-      return data.replaceFirst('Bearer ', '');
+      return data.replaceFirst('Bearer ', '').trim();
     }
 
     if (data is Map) {
@@ -174,7 +174,7 @@ class AuthService {
           data['authorization'];
 
       if (directToken != null) {
-        return directToken.toString().replaceFirst('Bearer ', '');
+        return directToken.toString().replaceFirst('Bearer ', '').trim();
       }
 
       final nestedData = data['data'];
@@ -185,7 +185,7 @@ class AuthService {
             nestedData['jwt'];
 
         if (nestedToken != null) {
-          return nestedToken.toString().replaceFirst('Bearer ', '');
+          return nestedToken.toString().replaceFirst('Bearer ', '').trim();
         }
       }
 
@@ -197,7 +197,7 @@ class AuthService {
             user['jwt'];
 
         if (userToken != null) {
-          return userToken.toString().replaceFirst('Bearer ', '');
+          return userToken.toString().replaceFirst('Bearer ', '').trim();
         }
       }
     }
@@ -207,14 +207,15 @@ class AuthService {
 
   static bool _isSuccess(dynamic response) {
     if (response == null) return true;
-
     if (response is bool) return response;
 
     if (response is String) {
-      return response.toLowerCase().contains('success') ||
-          response.toLowerCase().contains('sent') ||
-          response.toLowerCase().contains('done') ||
-          response.toLowerCase().contains('ok');
+      final value = response.toLowerCase();
+
+      return value.contains('success') ||
+          value.contains('sent') ||
+          value.contains('done') ||
+          value.contains('ok');
     }
 
     if (response is Map) {
@@ -224,12 +225,16 @@ class AuthService {
 
       if (response['status'] != null) {
         final status = response['status'].toString().toLowerCase();
-        if (status == 'success' || status == 'ok') return true;
+
+        if (status == 'success' || status == 'ok') {
+          return true;
+        }
       }
 
       if (response['message'] != null ||
           response['token'] != null ||
-          response['accessToken'] != null) {
+          response['accessToken'] != null ||
+          response['data'] != null) {
         return true;
       }
     }

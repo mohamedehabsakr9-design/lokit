@@ -82,45 +82,21 @@ class ShippingService {
       withAuth: true,
     );
 
-    if (data is List) {
-      return data.map((e) {
-        if (e is Map<String, dynamic>) {
-          return AddressResponse.fromJson(e).toMapForUi();
-        }
+    final list = _extractList(data);
 
-        if (e is Map) {
-          return AddressResponse.fromJson(
-            Map<String, dynamic>.from(e),
-          ).toMapForUi();
-        }
+    return list.map((e) {
+      if (e is Map<String, dynamic>) {
+        return AddressResponse.fromJson(e).toMapForUi();
+      }
 
-        return e;
-      }).toList();
-    }
+      if (e is Map) {
+        return AddressResponse.fromJson(
+          Map<String, dynamic>.from(e),
+        ).toMapForUi();
+      }
 
-    if (data is Map && data['content'] is List) {
-      return (data['content'] as List).map((e) {
-        if (e is Map) {
-          return AddressResponse.fromJson(
-            Map<String, dynamic>.from(e),
-          ).toMapForUi();
-        }
-        return e;
-      }).toList();
-    }
-
-    if (data is Map && data['data'] is List) {
-      return (data['data'] as List).map((e) {
-        if (e is Map) {
-          return AddressResponse.fromJson(
-            Map<String, dynamic>.from(e),
-          ).toMapForUi();
-        }
-        return e;
-      }).toList();
-    }
-
-    return [];
+      return e;
+    }).toList();
   }
 
   static Future<AddressResponse> getById(int addressId) async {
@@ -129,37 +105,17 @@ class ShippingService {
       withAuth: true,
     );
 
-    if (data is Map<String, dynamic>) {
-      return AddressResponse.fromJson(data);
-    }
-
-    if (data is Map) {
-      return AddressResponse.fromJson(
-        Map<String, dynamic>.from(data),
-      );
-    }
-
-    throw Exception('Invalid address response');
+    return _addressFromResponse(data);
   }
 
   static Future<AddressResponse> create(AddressRequest request) async {
     final data = await ApiService.post(
       '/addresses',
-      request.toJson(),
+      body: request.toJson(),
       withAuth: true,
     );
 
-    if (data is Map<String, dynamic>) {
-      return AddressResponse.fromJson(data);
-    }
-
-    if (data is Map) {
-      return AddressResponse.fromJson(
-        Map<String, dynamic>.from(data),
-      );
-    }
-
-    throw Exception('Invalid create address response');
+    return _addressFromResponse(data);
   }
 
   static Future<AddressResponse> update(
@@ -168,21 +124,11 @@ class ShippingService {
   ) async {
     final data = await ApiService.put(
       '/addresses/$addressId',
-      request.toJson(),
+      body: request.toJson(),
       withAuth: true,
     );
 
-    if (data is Map<String, dynamic>) {
-      return AddressResponse.fromJson(data);
-    }
-
-    if (data is Map) {
-      return AddressResponse.fromJson(
-        Map<String, dynamic>.from(data),
-      );
-    }
-
-    throw Exception('Invalid update address response');
+    return _addressFromResponse(data);
   }
 
   static Future<void> delete(int addressId) async {
@@ -191,6 +137,28 @@ class ShippingService {
       withAuth: true,
     );
   }
+}
+
+List<dynamic> _extractList(dynamic data) {
+  if (data is List) return data;
+  if (data is Map && data['content'] is List) return data['content'];
+  if (data is Map && data['data'] is List) return data['data'];
+  if (data is Map && data['items'] is List) return data['items'];
+  return [];
+}
+
+AddressResponse _addressFromResponse(dynamic data) {
+  if (data is Map<String, dynamic>) {
+    return AddressResponse.fromJson(data);
+  }
+
+  if (data is Map) {
+    return AddressResponse.fromJson(
+      Map<String, dynamic>.from(data),
+    );
+  }
+
+  throw Exception('Invalid address response');
 }
 
 String _toString(dynamic value) {

@@ -1,17 +1,9 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
+
 import '../../app/app_strings.dart';
+import '../../services/api_service.dart';
 
 const String kBaseUrl = 'https://lokit-production.up.railway.app';
-
-Future<String?> getJwtToken() async {
-  // TODO: رجّع التوكن من المكان اللي مخزنه فيه
-  // مثال SharedPreferences:
-  // final prefs = await SharedPreferences.getInstance();
-  // return prefs.getString('jwt_token');
-  return null;
-}
 
 class ProductDetailsScreen extends StatefulWidget {
   final int productId;
@@ -38,59 +30,100 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
     _future = ProductApi.getProductDetails(widget.productId);
   }
 
-  Future<void> addToCart(ProductDetailsData product) async {
-    final token = await getJwtToken();
+  String _msg({
+    required String ar,
+    required String en,
+  }) {
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    return isArabic ? ar : en;
+  }
 
-    if (token == null) {
-      showMsg('Please login first');
+  Future<void> addToCart(ProductDetailsData product) async {
+    final token = await ApiService.getToken();
+
+    if (token == null || token.isEmpty) {
+      showMsg(
+        _msg(
+          ar: 'يرجى تسجيل الدخول أولاً',
+          en: 'Please login first',
+        ),
+      );
       return;
     }
 
     final variant = selectedVariant ??
         (product.variants.isNotEmpty ? product.variants.first : null);
 
-    if (variant == null) {
-      showMsg('No product variant available');
+    if (variant == null || variant.id == 0) {
+      showMsg(
+        _msg(
+          ar: 'لا توجد نسخة متاحة من المنتج',
+          en: 'No product variant available',
+        ),
+      );
       return;
     }
 
     setState(() => cartLoading = true);
 
     try {
-      await ProductApi.addToCart(
-        token: token,
-        productVariantId: variant.id,
-        quantity: quantity,
+      await ApiService.post(
+        '/cart/items',
+        body: {
+          'productVariantId': variant.id,
+          'quantity': quantity,
+        },
+        withAuth: true,
       );
-      showMsg('Added to cart');
-    } catch (e) {
-      showMsg(e.toString());
-    }
 
-    if (mounted) setState(() => cartLoading = false);
+      showMsg(
+        _msg(
+          ar: 'تمت الإضافة إلى السلة',
+          en: 'Added to cart',
+        ),
+      );
+    } catch (e) {
+      showMsg(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => cartLoading = false);
+    }
   }
 
   Future<void> addToWishlist() async {
-    final token = await getJwtToken();
+    final token = await ApiService.getToken();
 
-    if (token == null) {
-      showMsg('Please login first');
+    if (token == null || token.isEmpty) {
+      showMsg(
+        _msg(
+          ar: 'يرجى تسجيل الدخول أولاً',
+          en: 'Please login first',
+        ),
+      );
       return;
     }
 
     setState(() => wishlistLoading = true);
 
     try {
-      await ProductApi.addToWishlist(
-        token: token,
-        productId: widget.productId,
+      await ApiService.post(
+        '/wishlist',
+        body: {
+          'productId': widget.productId,
+        },
+        withAuth: true,
       );
-      showMsg('Added to wishlist');
-    } catch (e) {
-      showMsg(e.toString());
-    }
 
-    if (mounted) setState(() => wishlistLoading = false);
+      showMsg(
+        _msg(
+          ar: 'تمت الإضافة إلى المفضلة',
+          en: 'Added to wishlist',
+        ),
+      );
+    } catch (e) {
+      showMsg(e.toString().replaceFirst('Exception: ', ''));
+    } finally {
+      if (mounted) setState(() => wishlistLoading = false);
+    }
   }
 
   void showMsg(String msg) {
@@ -119,7 +152,12 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
               return Center(
                 child: Padding(
                   padding: const EdgeInsets.all(20),
-                  child: Text(snapshot.error.toString()),
+                  child: Text(
+                    snapshot.error
+                        .toString()
+                        .replaceFirst('Exception: ', ''),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               );
             }
@@ -214,14 +252,11 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                       ],
                     ),
                   ),
-
                   Align(
                     alignment: Alignment.bottomCenter,
                     child: Container(
                       padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-                      decoration: const BoxDecoration(
-                        color: Colors.white,
-                      ),
+                      color: Colors.white,
                       child: Row(
                         children: [
                           Column(
@@ -229,7 +264,7 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Text(
-                                'Total Price',
+                                s.productTotalPriceLabel,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey.shade500,
@@ -250,8 +285,9 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
                             child: SizedBox(
                               height: 56,
                               child: ElevatedButton.icon(
-                                onPressed:
-                                    cartLoading ? null : () => addToCart(product),
+                                onPressed: cartLoading
+                                    ? null
+                                    : () => addToCart(product),
                                 icon: cartLoading
                                     ? const SizedBox(
                                         width: 18,
@@ -304,68 +340,20 @@ class _ProductDetailsScreenState extends State<ProductDetailsScreen> {
 class ProductApi {
   static Future<ProductDetailsData> getProductDetails(int productId) async {
     final responses = await Future.wait([
-      http.get(Uri.parse('$kBaseUrl/product/$productId/details')),
-      http.get(Uri.parse('$kBaseUrl/variants/product/$productId')),
-      http.get(Uri.parse('$kBaseUrl/product-images/product/$productId')),
+      ApiService.get('/product/$productId/details'),
+      ApiService.get('/variants/product/$productId'),
+      ApiService.get('/product-images/product/$productId'),
     ]);
 
-    for (final res in responses) {
-      if (res.statusCode < 200 || res.statusCode >= 300) {
-        throw Exception('API Error ${res.statusCode}: ${res.body}');
-      }
-    }
-
-    final detailsJson = jsonDecode(responses[0].body);
-    final variantsJson = jsonDecode(responses[1].body) as List;
-    final imagesJson = jsonDecode(responses[2].body) as List;
+    final detailsJson = responses[0];
+    final variantsJson = responses[1] is List ? responses[1] as List : [];
+    final imagesJson = responses[2] is List ? responses[2] as List : [];
 
     return ProductDetailsData.fromJson(
       detailsJson,
       variantsJson,
       imagesJson,
     );
-  }
-
-  static Future<void> addToCart({
-    required String token,
-    required int productVariantId,
-    required int quantity,
-  }) async {
-    final res = await http.post(
-      Uri.parse('$kBaseUrl/cart/items'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'productVariantId': productVariantId,
-        'quantity': quantity,
-      }),
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('Cart Error ${res.statusCode}: ${res.body}');
-    }
-  }
-
-  static Future<void> addToWishlist({
-    required String token,
-    required int productId,
-  }) async {
-    final res = await http.post(
-      Uri.parse('$kBaseUrl/wishlist'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'productId': productId,
-      }),
-    );
-
-    if (res.statusCode < 200 || res.statusCode >= 300) {
-      throw Exception('Wishlist Error ${res.statusCode}: ${res.body}');
-    }
   }
 }
 
@@ -397,7 +385,7 @@ class ProductDetailsData {
     List variantsJson,
     List imagesJson,
   ) {
-    final map = json as Map<String, dynamic>;
+    final map = json is Map ? Map<String, dynamic>.from(json) : {};
 
     final imageMaps = imagesJson
         .whereType<Map>()
@@ -427,6 +415,10 @@ class ProductDetailsData {
             ),
           );
 
+    final variants = variantsJson
+        .map((e) => ProductVariantData.fromJson(e))
+        .toList();
+
     return ProductDetailsData(
       id: _int(map['id'] ?? map['productId']),
       name: _str(map['name'] ?? map['productName'] ?? map['title']),
@@ -436,12 +428,12 @@ class ProductDetailsData {
             map['brandResponse']?['name'],
       ),
       description: _str(map['description']),
-      price: _double(map['price']),
+      price: _double(
+        map['price'] ?? (variants.isNotEmpty ? variants.first.price : 0),
+      ),
       rating: _double(map['rating'] ?? map['averageRating']),
       mainImageUrl: imageUrl,
-      variants: variantsJson
-          .map((e) => ProductVariantData.fromJson(e))
-          .toList(),
+      variants: variants,
     );
   }
 }
@@ -462,10 +454,10 @@ class ProductVariantData {
   });
 
   factory ProductVariantData.fromJson(dynamic json) {
-    final map = json as Map<String, dynamic>;
+    final map = json is Map ? Map<String, dynamic>.from(json) : {};
 
     return ProductVariantData(
-      id: _int(map['id'] ?? map['variantId']),
+      id: _int(map['id'] ?? map['variantId'] ?? map['productVariantId']),
       size: _str(
         map['size'] ??
             map['sizeName'] ??
@@ -523,26 +515,18 @@ class _ProductImageHeader extends StatelessWidget {
         AspectRatio(
           aspectRatio: 430 / 430,
           child: imageUrl == null || imageUrl!.isEmpty
-              ? Image.asset(
-                  'lib/assets/product_sample.png',
-                  fit: BoxFit.cover,
-                )
+              ? _imagePlaceholder()
               : Image.network(
                   imageUrl!,
                   fit: BoxFit.cover,
-                  errorBuilder: (_, __, ___) => Image.asset(
-                    'lib/assets/product_sample.png',
-                    fit: BoxFit.cover,
-                  ),
+                  errorBuilder: (_, __, ___) => _imagePlaceholder(),
                 ),
         ),
-
         Positioned.fill(
           child: Container(
             color: Colors.white.withOpacity(0.15),
           ),
         ),
-
         Positioned(
           top: 24,
           left: 24,
@@ -551,7 +535,6 @@ class _ProductImageHeader extends StatelessWidget {
             onTap: () => Navigator.pop(context),
           ),
         ),
-
         Positioned(
           top: 24,
           right: 24,
@@ -560,7 +543,6 @@ class _ProductImageHeader extends StatelessWidget {
             onTap: () => showAiPhotoInstructions(context, s),
           ),
         ),
-
         Positioned(
           right: 24,
           bottom: 24,
@@ -572,6 +554,13 @@ class _ProductImageHeader extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+
+  Widget _imagePlaceholder() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Icon(Icons.image, size: 48),
     );
   }
 }
@@ -628,7 +617,6 @@ class _TitlePriceQty extends StatelessWidget {
             ],
           ),
         ),
-
         Container(
           padding: const EdgeInsets.all(5),
           decoration: BoxDecoration(
@@ -642,9 +630,7 @@ class _TitlePriceQty extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
                   '$quantity',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                  ),
+                  style: const TextStyle(fontWeight: FontWeight.w700),
                 ),
               ),
               _QtyButton(icon: Icons.add, onTap: onPlus),
@@ -898,17 +884,17 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
               ),
               child: Column(
                 children: [
-                  const Text(
-                    'AI Try - Before - you - Buy ✨',
+                  Text(
+                    s.aiSheetTitle,
                     textAlign: TextAlign.center,
-                    style: TextStyle(
+                    style: const TextStyle(
                       fontSize: 17,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 14),
                   Text(
-                    'Select an image source',
+                    s.aiSheetSubtitle,
                     style: TextStyle(
                       fontSize: 15,
                       color: Colors.grey.shade500,
@@ -920,10 +906,9 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
                       Expanded(
                         child: _AiSourceButton(
                           icon: Icons.camera_alt,
-                          label: 'Camera',
+                          label: s.aiPreviewCamera,
                           onTap: () {
                             Navigator.pop(context);
-                            // TODO: افتح الكاميرا هنا
                           },
                         ),
                       ),
@@ -931,10 +916,9 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
                       Expanded(
                         child: _AiSourceButton(
                           icon: Icons.photo_library,
-                          label: 'Gallery',
+                          label: s.aiPreviewGallery,
                           onTap: () {
                             Navigator.pop(context);
-                            // TODO: افتح المعرض هنا
                           },
                         ),
                       ),
@@ -943,9 +927,7 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
                 ],
               ),
             ),
-
             const SizedBox(height: 24),
-
             Container(
               width: double.infinity,
               padding: const EdgeInsets.fromLTRB(24, 20, 24, 18),
@@ -955,29 +937,22 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
               ),
               child: Column(
                 children: [
-                  const Text(
-                    'Photo Instructions',
-                    style: TextStyle(
+                  Text(
+                    s.aiSheetInstructionsTitle,
+                    style: const TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 18),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Text(
-                      'For best results :',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
-                      ),
+                  Text(
+                    s.aiSheetInstructionsBody,
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                      color: Colors.grey.shade600,
                     ),
                   ),
-                  const SizedBox(height: 8),
-                  _instruction('1. Stand straight facing the camera.'),
-                  _instruction('2. Ensure good lighting'),
-                  _instruction('3. Keep arms slightly away from body.'),
-                  _instruction('4. Make sure your full upper body is visible'),
                 ],
               ),
             ),
@@ -985,23 +960,6 @@ void showAiPhotoInstructions(BuildContext context, AppStrings s) {
         ),
       );
     },
-  );
-}
-
-Widget _instruction(String text) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Align(
-      alignment: Alignment.centerLeft,
-      child: Text(
-        text,
-        style: TextStyle(
-          fontSize: 12,
-          height: 1.4,
-          color: Colors.grey.shade600,
-        ),
-      ),
-    ),
   );
 }
 

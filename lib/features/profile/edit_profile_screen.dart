@@ -57,10 +57,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (!mounted) return;
 
       setState(() => _isLoading = false);
-
-      _showMessage(
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      _showMessage(e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -86,7 +83,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
     try {
       await ApiService.put(
         '/account',
-        {
+        body: {
           'email': email,
           'username': username,
           'firstName': firstName,
@@ -99,14 +96,10 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       if (!mounted) return;
 
       _showMessage('Profile updated successfully');
-
       Navigator.pop(context, true);
     } catch (e) {
       if (!mounted) return;
-
-      _showMessage(
-        e.toString().replaceFirst('Exception: ', ''),
-      );
+      _showMessage(e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -114,9 +107,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
 
   String _readString(Map data, String key) {
     final value = data[key];
-
     if (value == null) return '';
-
     return value.toString();
   }
 
@@ -186,7 +177,6 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       ],
                     ),
                     const SizedBox(height: 24),
-
                     _ProfileField(
                       label: s.editProfileEmail,
                       controller: emailController,
@@ -194,18 +184,14 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       enabled: !_isSaving,
                       textAlign: isArabic ? TextAlign.right : TextAlign.left,
                     ),
-
                     const SizedBox(height: 12),
-
                     _ProfileField(
                       label: s.editProfileUserName,
                       controller: usernameController,
                       enabled: !_isSaving,
                       textAlign: isArabic ? TextAlign.right : TextAlign.left,
                     ),
-
                     const SizedBox(height: 12),
-
                     Row(
                       children: [
                         Expanded(
@@ -229,9 +215,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 12),
-
                     _ProfileField(
                       label: s.editProfilePhone,
                       controller: phoneController,
@@ -239,9 +223,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                       enabled: !_isSaving,
                       textAlign: isArabic ? TextAlign.right : TextAlign.left,
                     ),
-
                     const SizedBox(height: 24),
-
                     SizedBox(
                       width: double.infinity,
                       height: 48,
@@ -295,8 +277,9 @@ class _ProfileField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment:
-          textAlign == TextAlign.right ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+      crossAxisAlignment: textAlign == TextAlign.right
+          ? CrossAxisAlignment.end
+          : CrossAxisAlignment.start,
       children: [
         Text(label),
         const SizedBox(height: 6),
