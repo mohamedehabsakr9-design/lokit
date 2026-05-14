@@ -1,37 +1,56 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../app/api_constants.dart';
 
 class ApiService {
-  static Future<Map<String, String>> _headers({bool withAuth = false}) async {
-    final headers = {
-      'Content-Type': 'application/json',
-      'Accept': 'application/json',
-    };
+  static final Dio _dio = Dio(
+    BaseOptions(
+      baseUrl: ApiConstants.baseUrl,
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+      },
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      validateStatus: (status) {
+        return status != null && status < 500;
+      },
+    ),
+  );
 
-    if (withAuth) {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('token');
+  static Future<Map<String, String>> _authHeader() async {
+    final prefs = await SharedPreferences.getInstance();
 
-      if (token != null && token.isNotEmpty) {
-        headers['Authorization'] = 'Bearer $token';
-      }
+    final token = prefs.getString('token') ??
+        prefs.getString('jwt') ??
+        prefs.getString('accessToken');
+
+    debugPrint('╔════════ AUTH HEADER ════════╗');
+    debugPrint('Has Token: ${token != null && token.isNotEmpty}');
+    debugPrint('╚═════════════════════════════╝');
+
+    if (token != null && token.isNotEmpty) {
+      return {
+        'Authorization': 'Bearer $token',
+      };
     }
 
-    return headers;
+    return {};
   }
 
   static Future<dynamic> get(
     String endpoint, {
     bool withAuth = false,
+    Map<String, dynamic>? queryParameters,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}$endpoint');
+    final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await http.get(
-      url,
-      headers: await _headers(withAuth: withAuth),
+    final response = await _dio.get(
+      endpoint,
+      queryParameters: queryParameters,
+      options: Options(headers: headers),
     );
 
     return _handleResponse(response);
@@ -42,12 +61,17 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}$endpoint');
+    final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await http.post(
-      url,
-      headers: await _headers(withAuth: withAuth),
-      body: jsonEncode(body),
+    debugPrint('╔════════ API REQUEST ════════╗');
+    debugPrint('URL  : ${ApiConstants.baseUrl}$endpoint');
+    debugPrint('BODY : $body');
+    debugPrint('╚═════════════════════════════╝');
+
+    final response = await _dio.post(
+      endpoint,
+      data: body,
+      options: Options(headers: headers),
     );
 
     return _handleResponse(response);
@@ -58,12 +82,12 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}$endpoint');
+    final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await http.put(
-      url,
-      headers: await _headers(withAuth: withAuth),
-      body: jsonEncode(body),
+    final response = await _dio.put(
+      endpoint,
+      data: body,
+      options: Options(headers: headers),
     );
 
     return _handleResponse(response);
@@ -74,12 +98,12 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}$endpoint');
+    final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await http.patch(
-      url,
-      headers: await _headers(withAuth: withAuth),
-      body: jsonEncode(body),
+    final response = await _dio.patch(
+      endpoint,
+      data: body,
+      options: Options(headers: headers),
     );
 
     return _handleResponse(response);
@@ -89,25 +113,45 @@ class ApiService {
     String endpoint, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('${ApiConstants.baseUrl}$endpoint');
+    final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await http.delete(
-      url,
-      headers: await _headers(withAuth: withAuth),
+    final response = await _dio.delete(
+      endpoint,
+      options: Options(headers: headers),
     );
 
     return _handleResponse(response);
   }
 
-  static dynamic _handleResponse(http.Response response) {
-    final statusCode = response.statusCode;
-    final body = response.body;
+  static dynamic _handleResponse(Response response) {
+    final statusCode = response.statusCode ?? 0;
+    final body = response.data;
+
+    debugPrint('╔════════ API RESPONSE ════════╗');
+    debugPrint('STATUS : $statusCode');
+    debugPrint('URL    : ${response.realUri}');
+    debugPrint('BODY   : $body');
+    debugPrint('╚═════════════════════════════╝');
 
     if (statusCode >= 200 && statusCode < 300) {
-      if (body.isEmpty) return null;
-      return jsonDecode(body);
+      return body;
     }
 
-    throw Exception('Request failed: $statusCode - $body');
+    String errorMessage = 'Request failed: $statusCode';
+
+    if (body is Map) {
+      final msg = body['message'] ??
+          body['error'] ??
+          body['msg'] ??
+          body['detail'];
+
+      if (msg != null) {
+        errorMessage = msg.toString();
+      }
+    } else if (body != null) {
+      errorMessage = body.toString();
+    }
+
+    throw Exception(errorMessage);
   }
 }

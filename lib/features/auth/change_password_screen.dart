@@ -1,4 +1,3 @@
-// change_password_screen.dart
 import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
 import '../../services/auth_service.dart';
@@ -16,10 +15,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   bool _obscureConfirm = true;
   bool _isLoading = false;
 
-  final TextEditingController _oldPasswordController =
-      TextEditingController();
-  final TextEditingController _newPasswordController =
-      TextEditingController();
+  final TextEditingController _oldPasswordController = TextEditingController();
+  final TextEditingController _newPasswordController = TextEditingController();
   final TextEditingController _confirmPasswordController =
       TextEditingController();
 
@@ -32,24 +29,23 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
   }
 
   Future<void> _savePassword() async {
+    final s = AppStrings.of(context);
     final oldPassword = _oldPasswordController.text.trim();
     final newPassword = _newPasswordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
+    // ✅ Fix: s.pleaseFillAllFields بدل pleaseFillAllFields
     if (oldPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please fill all fields'),
-        ),
+        SnackBar(content: Text(s.pleaseFillAllFields)),
       );
       return;
     }
 
+    // ✅ Fix: رسالة واضحة للـ passwords don't match
     if (newPassword != confirmPassword) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('New password and confirm password do not match'),
-        ),
+        const SnackBar(content: Text('Passwords do not match')),
       );
       return;
     }
@@ -57,15 +53,22 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     if (newPassword.length < 8) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Password must be at least 8 characters'),
-        ),
+            content: Text('Password must be at least 8 characters')),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    // ✅ Fix: التحقق إن الباسورد الجديد مختلف عن القديم
+    if (oldPassword == newPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content:
+                Text('New password must be different from old password')),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
 
     try {
       await AuthService.changePassword(
@@ -77,34 +80,35 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Password changed successfully'),
-        ),
+        SnackBar(content: Text(s.passwordResetSuccessfully)),
       );
 
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
 
+      // ✅ Fix: رسالة خطأ أوضح — الغالب الباسورد القديم غلط
+      String errorMsg = 'Failed to change password';
+      if (e.toString().contains('403') ||
+          e.toString().contains('Forbidden') ||
+          e.toString().contains('wrong')) {
+        errorMsg = 'Old password is incorrect';
+      } else if (e.toString().contains('401')) {
+        errorMsg = 'Session expired, please login again';
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Change password failed: $e'),
-        ),
+        SnackBar(content: Text(errorMsg)),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final locale = Localizations.localeOf(context);
-    final isArabic = locale.languageCode == 'ar';
+    final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -131,32 +135,27 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                 controller: _oldPasswordController,
                 label: s.changePasswordOld,
                 obscure: _obscureOld,
-                onToggle: () {
-                  setState(() => _obscureOld = !_obscureOld);
-                },
+                onToggle: () => setState(() => _obscureOld = !_obscureOld),
               ),
               const SizedBox(height: 16),
               _PasswordField(
                 controller: _newPasswordController,
                 label: s.changePasswordNew,
                 obscure: _obscureNew,
-                onToggle: () {
-                  setState(() => _obscureNew = !_obscureNew);
-                },
+                onToggle: () => setState(() => _obscureNew = !_obscureNew),
               ),
               const SizedBox(height: 16),
               _PasswordField(
                 controller: _confirmPasswordController,
                 label: s.changePasswordConfirm,
                 obscure: _obscureConfirm,
-                onToggle: () {
-                  setState(() => _obscureConfirm = !_obscureConfirm);
-                },
+                onToggle: () =>
+                    setState(() => _obscureConfirm = !_obscureConfirm),
               ),
               const SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
-                height: 48,
+                height: 52,
                 child: ElevatedButton(
                   onPressed: _isLoading ? null : _savePassword,
                   style: ElevatedButton.styleFrom(
@@ -165,6 +164,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
+                    elevation: 0,
                   ),
                   child: _isLoading
                       ? const SizedBox(
@@ -175,7 +175,14 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                             color: Colors.white,
                           ),
                         )
-                      : Text(s.changePasswordSave),
+                      : Text(
+                          s.changePasswordSave,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.white,
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -204,22 +211,39 @@ class _PasswordField extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w500,
+            color: Colors.black87,
+          ),
+        ),
         const SizedBox(height: 6),
         TextField(
           controller: controller,
           obscureText: obscure,
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.lock_outline),
+            prefixIcon: const Icon(Icons.lock_outline, color: Colors.black54),
             suffixIcon: IconButton(
               icon: Icon(
                 obscure ? Icons.visibility_off : Icons.visibility,
+                color: Colors.black54,
               ),
               onPressed: onToggle,
             ),
-            border: OutlineInputBorder(
+            filled: true,
+            fillColor: Colors.white,
+            enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: Colors.grey.shade300),
             ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: const BorderSide(color: Colors.black, width: 1.5),
+            ),
+            contentPadding:
+                const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
           ),
         ),
       ],

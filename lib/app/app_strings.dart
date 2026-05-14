@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 /// كلاس بسيط لإدارة النصوص المترجمة بدون ARB أو باكدجات خارجية.
 class AppStrings {
+   
   final bool isArabic;
 
   AppStrings._(this.isArabic);
@@ -134,8 +135,16 @@ class AppStrings {
       isArabic ? 'تم إرسال رمز إعادة التعيين إلى بريدك' : 'Reset code sent to your email';
   String get passwordResetSuccessfully =>
       isArabic ? 'تم إعادة تعيين كلمة المرور بنجاح' : 'Password reset successfully';
+// ===================== Shipping =====================
+  String get shippingTitle => isArabic ? 'عناوين الشحن' : 'Shipping Addresses';
+  String get shippingNewAddress => isArabic ? 'إضافة عنوان جديد' : 'Add New Address';
 
-
+  String get shippingCity => isArabic ? 'المدينة' : 'City';
+  String get shippingStreet => isArabic ? 'الشارع' : 'Street';
+  String get shippingBuilding => isArabic ? 'المبنى' : 'Building';
+  String get shippingPostalCode => isArabic ? 'الرمز البريدي' : 'Postal Code';
+  String get shippingSave => isArabic ? 'حفظ' : 'Save';
+String get failedToLoadProfile => 'فشل تحميل البيانات';
   // ===================== Sign In =====================
   String get signInTitle => isArabic ? 'تسجيل الدخول' : 'Sign In';
   String get signInEmailLabel => isArabic ? 'البريد الإلكتروني' : 'Email';
@@ -175,7 +184,7 @@ String get emailLabel => 'البريد الإلكتروني';
   String get signUpAlreadyHave =>
       isArabic ? 'لديك حساب بالفعل؟ ' : 'Already have an account? ';
   String get signUpSignIn => isArabic ? 'تسجيل الدخول' : 'Sign In';
-
+String get pleaseFillAllFields => 'يرجى ملء جميع الحقول';
   // ===================== Onboarding =====================
   String get onboardingTitle1 =>
       isArabic ? 'أفضل مجموعة لهذا الشهر' : "Best of this month's\nCollection";
@@ -476,7 +485,16 @@ String get confirmPasswordLabel => 'تأكيد كلمة المرور';
 String get resetPasswordButton => 'إعادة تعيين كلمة المرور';
 String get pleaseFillAllFields => 'يرجى ملء جميع الحقول';
 String get failedToLoadProfile => 'فشل تحميل البيانات';
+
 // --------- SnackBar / Messages الجديدة ---------
 String get resetCodeSent => 'تم إرسال رمز إعادة التعيين إلى بريدك';
 String get passwordResetSuccessfully => 'تم إعادة تعيين كلمة المرور بنجاح';
 // ===================== SnackBar / Messages =====================
+ String get shippingTitle => 'عناوين الشحن';
+  String get shippingNewAddress => 'إضافة عنوان جديد';
+  String get homeProductName => 'اسم المنزل';
+  String get shippingCity => 'المدينة';
+  String get shippingStreet => 'الشارع';
+  String get shippingBuilding => 'المبنى';
+  String get shippingPostalCode => 'الرمز البريدي';
+  String get shippingSave => 'حفظ';

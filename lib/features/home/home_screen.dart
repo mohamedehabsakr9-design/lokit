@@ -5,7 +5,6 @@ import '../products/product_details_screen.dart';
 import '../../app/app_strings.dart';
 import '../../services/product_service.dart';
 
-// الشاشات المرتبطة بالـ Bottom Bar
 import '../products/search_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 import '../cart/my_cart_screen.dart';
@@ -85,7 +84,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 children: [
                   const SizedBox(height: 16),
 
-                  // شريط البحث + الإشعارات
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     child: Row(
@@ -249,7 +247,6 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // رسالة نجاح التسجيل
             if (_showSuccessOverlay)
               Center(
                 child: Container(
@@ -478,6 +475,20 @@ class _ProductSection extends StatelessWidget {
     return '';
   }
 
+  int _extractProductId(dynamic product) {
+    if (product is! Map) return 0;
+
+    final id = product['id'] ??
+        product['productId'] ??
+        product['productID'] ??
+        product['product_id'];
+
+    if (id == null) return 0;
+    if (id is int) return id;
+
+    return int.tryParse(id.toString()) ?? 0;
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -548,10 +559,16 @@ class _ProductSection extends StatelessWidget {
                       price: _extractPrice(product),
                       imageUrl: _extractImageUrl(product),
                       onTap: () {
+                        final productId = _extractProductId(product);
+
+                        if (productId == 0) return;
+
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) => const ProductDetailsScreen(),
+                            builder: (_) => ProductDetailsScreen(
+                              productId: productId,
+                            ),
                           ),
                         );
                       },
@@ -601,7 +618,10 @@ class _ProductSection extends StatelessWidget {
       }
 
       if (firstImage is Map) {
-        final url = firstImage['url'] ?? firstImage['imageUrl'];
+        final url = firstImage['url'] ??
+            firstImage['imageUrl'] ??
+            firstImage['imagePath'];
+
         if (url != null && url.toString().isNotEmpty) {
           return url.toString();
         }

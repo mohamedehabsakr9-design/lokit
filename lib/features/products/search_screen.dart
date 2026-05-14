@@ -1,8 +1,11 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
+import '../../core/models/product_search_model.dart';
+import '../../core/services/search_service.dart';
 import '../home/home_screen.dart';
-import '../wishlist/wishlist_screen.dart';
 import '../profile/profile_menu_screen.dart';
+import '../wishlist/wishlist_screen.dart';
 import 'product_details_screen.dart';
 
 class SearchScreen extends StatefulWidget {
@@ -13,25 +16,91 @@ class SearchScreen extends StatefulWidget {
 }
 
 class _SearchScreenState extends State<SearchScreen> {
+  final SearchService _searchService = SearchService();
+
+  // Search
   String _query = '';
-  String _selectedDept = '';
-  bool _showResults = false;
-  bool _hasResults = true;
+  bool _isLoading = false;
+  bool _hasSearched = false;
+  String? _errorMessage;
+  List<ProductSearchModel> _results = [];
+  DateTime? _lastTyped;
+
+  // Filters
+  int? _selectedBrandId;
+  int? _selectedCategoryId;
+  int? _selectedColorId;
+  int? _selectedSizeId;
+  double? _minPrice;
+  double? _maxPrice;
+
+  void _onQueryChanged(String value) {
+    setState(() {
+      _query = value;
+      if (_query.trim().isEmpty) {
+        _hasSearched = false;
+        _results = [];
+        _errorMessage = null;
+        return;
+      }
+    });
+
+    if (_query.trim().length < 2) return;
+
+    final typed = DateTime.now();
+    _lastTyped = typed;
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (_lastTyped == typed && mounted) _performSearch();
+    });
+  }
+
+  Future<void> _performSearch() async {
+    if (_query.trim().isEmpty) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final results = await _searchService.searchProducts(
+        keyword:    _query.trim(),
+        brandId:    _selectedBrandId,
+        categoryId: _selectedCategoryId,
+        colorId:    _selectedColorId,
+        sizeId:     _selectedSizeId,
+        minPrice:   _minPrice,
+        maxPrice:   _maxPrice,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _results     = results;
+        _hasSearched = true;
+        _isLoading   = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading    = false;
+        _hasSearched  = true;
+        _errorMessage = e.response?.data?['message'] as String?
+            ?? 'Connection error. Please try again.';
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading    = false;
+        _hasSearched  = true;
+        _errorMessage = 'Something went wrong.';
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
+    final s       = AppStrings.of(context);
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
-
-    final products = List.generate(4, (index) {
-      return {
-        'name': '${s.productNameExample} $index',
-        'brand': 'Zara',
-        'price': '\$100',
-      };
-    });
-
-    final filteredProducts = _showResults && _hasResults ? products : <Map>[];
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -53,122 +122,30 @@ class _SearchScreenState extends State<SearchScreen> {
         body: Column(
           children: [
             const SizedBox(height: 8),
-            _SearchBarAndFilters(
-              query: _query,
-              onQueryChanged: (value) {
-                setState(() {
-                  _query = value;
-                  if (_query.trim().isEmpty) {
-                    _showResults = false;
-                    _hasResults = true;
-                  } else {
-                    _showResults = true;
-                    _hasResults = true;
-                  }
-                });
-              },
-              selectedDept: _selectedDept,
-              onDeptChanged: (value) {
-                setState(() {
-                  _selectedDept = value;
-                  _showResults = true;
-                  _hasResults = true;
-                });
-              },
-            ),
+            _SearchBarWidget(onQueryChanged: _onQueryChanged),
             const SizedBox(height: 16),
-            Expanded(
-              child: _buildBodyState(context, s, filteredProducts),
-            ),
+            Expanded(child: _buildBody(s)),
           ],
         ),
-        bottomNavigationBar: SafeArea(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.07),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _BottomItem(
-                  icon: Icons.home_filled,
-                  label: 'Home',
-                  onTap: () {
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const HomeScreen(),
-                      ),
-                      (route) => false,
-                    );
-                  },
-                ),
-                _BottomItem(
-                  icon: Icons.search,
-                  label: 'Search',
-                  isActive: true,
-                  onTap: () {},
-                ),
-                _BottomItem(
-                  icon: Icons.favorite_border,
-                  label: 'Wishlist',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const WishlistScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _BottomItem(
-                  icon: Icons.shopping_bag_outlined,
-                  label: 'Cart',
-                  onTap: () { /* اربطه لاحقاً بشاشة الكارت */ },
-                ),
-                _BottomItem(
-                  icon: Icons.person_outline,
-                  label: 'Profile',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ProfileMenuScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
+        bottomNavigationBar: _buildBottomNav(context),
       ),
     );
   }
 
-  Widget _buildBodyState(BuildContext context, AppStrings s, List<Map> products) {
-    if (!_showResults) {
-      return _EmptySearchState(
-        title: s.searchExploreNow,
-        isError: false,
+  Widget _buildBody(AppStrings s) {
+    if (!_hasSearched && !_isLoading) {
+      return _EmptyState(title: s.searchExploreNow, isError: false);
+    }
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: Colors.black),
       );
     }
-
-    if (_showResults && products.isEmpty) {
-      return _EmptySearchState(
-        title: s.searchNoResults,
-        isError: true,
-      );
+    if (_errorMessage != null) {
+      return _EmptyState(title: _errorMessage!, isError: true);
+    }
+    if (_results.isEmpty) {
+      return _EmptyState(title: s.searchNoResults, isError: true);
     }
 
     return Padding(
@@ -177,126 +154,21 @@ class _SearchScreenState extends State<SearchScreen> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            s.searchResultsTitle,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-            ),
+            '${s.searchResultsTitle} (${_results.length})',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 12),
           Expanded(
             child: GridView.builder(
-              itemCount: products.length,
+              itemCount: _results.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 childAspectRatio: 3 / 4.6,
                 mainAxisSpacing: 12,
                 crossAxisSpacing: 12,
               ),
-              itemBuilder: (context, index) {
-                final item = products[index];
-                return _SearchResultCard(
-                  name: item['name'] as String,
-                  brand: item['brand'] as String,
-                  price: item['price'] as String,
-                );
-              },
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _SearchBarAndFilters extends StatelessWidget {
-  final String query;
-  final ValueChanged<String> onQueryChanged;
-  final String selectedDept;
-  final ValueChanged<String> onDeptChanged;
-
-  const _SearchBarAndFilters({
-    required this.query,
-    required this.onQueryChanged,
-    required this.selectedDept,
-    required this.onDeptChanged,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final s = AppStrings.of(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Column(
-        children: [
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.03),
-                  blurRadius: 8,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                TextField(
-                  onChanged: onQueryChanged,
-                  decoration: InputDecoration(
-                    hintText: s.searchHint,
-                    prefixIcon: const Icon(Icons.search),
-                    border: InputBorder.none,
-                    contentPadding:
-                        const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                  ),
-                ),
-                const Divider(height: 1),
-                Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _FilterChipButton(
-                          label: s.searchFilterDepartment,
-                          isSelected: selectedDept.isNotEmpty,
-                          onTap: () async {
-                            final result = await _showDepartmentSheet(context);
-                            if (result != null) {
-                              onDeptChanged(result);
-                            }
-                          },
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChipButton(
-                          label: s.searchFilterCategory,
-                          onTap: () {},
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChipButton(
-                          label: s.searchFilterBrand,
-                          onTap: () {},
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChipButton(
-                          label: s.searchFilterColor,
-                          onTap: () {},
-                        ),
-                        const SizedBox(width: 8),
-                        _FilterChipButton(
-                          label: s.searchFilterSize,
-                          onTap: () {},
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
+              itemBuilder: (context, index) =>
+                  _ProductCard(product: _results[index]),
             ),
           ),
         ],
@@ -304,143 +176,60 @@ class _SearchBarAndFilters extends StatelessWidget {
     );
   }
 
-  Future<String?> _showDepartmentSheet(BuildContext context) async {
-    final s = AppStrings.of(context);
-    String temp = selectedDept.isEmpty ? s.searchMen : selectedDept;
-
-    return showModalBottomSheet<String>(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            final options = [
-              s.searchMen,
-              s.searchWomen,
-              s.searchUnisex,
-              s.searchKids,
-              s.searchSportswear,
-            ];
-            return Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    s.searchSortBy,
-                    style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ...options.map((o) {
-                    return RadioListTile<String>(
-                      value: o,
-                      groupValue: temp,
-                      contentPadding: EdgeInsets.zero,
-                      dense: true,
-                      onChanged: (val) {
-                        setState(() => temp = val!);
-                      },
-                      title: Text(
-                        o,
-                        style: const TextStyle(fontSize: 14),
-                      ),
-                    );
-                  }),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context, temp);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                            ),
-                            child: Text(s.searchApply),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: SizedBox(
-                          height: 44,
-                          child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.pop(context, '');
-                            },
-                            style: OutlinedButton.styleFrom(
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(22),
-                              ),
-                            ),
-                            child: Text(s.searchClear),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-}
-
-class _FilterChipButton extends StatelessWidget {
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  const _FilterChipButton({
-    required this.label,
-    this.isSelected = false,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final bg = isSelected ? Colors.black : const Color(0xFFF2F2F2);
-    final fg = isSelected ? Colors.white : Colors.black87;
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(20),
-      onTap: onTap,
+  Widget _buildBottomNav(BuildContext context) {
+    return SafeArea(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
         decoration: BoxDecoration(
-          color: bg,
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(30),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 20,
+              offset: const Offset(0, 10),
+            ),
+          ],
         ),
         child: Row(
-          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 12,
-                color: fg,
+            _NavItem(
+              icon: Icons.home_filled,
+              label: 'Home',
+              onTap: () => Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const HomeScreen()),
+                (r) => false,
               ),
             ),
-            const SizedBox(width: 4),
-            Icon(
-              Icons.keyboard_arrow_down_rounded,
-              size: 16,
-              color: fg,
+            _NavItem(
+              icon: Icons.search,
+              label: 'Search',
+              isActive: true,
+              onTap: () {},
+            ),
+            _NavItem(
+              icon: Icons.favorite_border,
+              label: 'Wishlist',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const WishlistScreen()),
+              ),
+            ),
+            _NavItem(
+              icon: Icons.shopping_bag_outlined,
+              label: 'Cart',
+              onTap: () {},
+            ),
+            _NavItem(
+              icon: Icons.person_outline,
+              label: 'Profile',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const ProfileMenuScreen()),
+              ),
             ),
           ],
         ),
@@ -449,73 +238,62 @@ class _FilterChipButton extends StatelessWidget {
   }
 }
 
-class _EmptySearchState extends StatelessWidget {
-  final String title;
-  final bool isError;
+// ─── Search Bar ───────────────────────────────────────────────────────────────
 
-  const _EmptySearchState({
-    required this.title,
-    required this.isError,
-  });
+class _SearchBarWidget extends StatelessWidget {
+  final ValueChanged<String> onQueryChanged;
+  const _SearchBarWidget({required this.onQueryChanged});
 
   @override
   Widget build(BuildContext context) {
-    final iconColor = isError ? Colors.redAccent : Colors.black54;
-
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 130,
-            height: 130,
-            decoration: const BoxDecoration(
-              color: Color(0xFFF2F2F2),
-              shape: BoxShape.circle,
+    final s = AppStrings.of(context);
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 4),
             ),
-            child: Icon(
-              Icons.search,
-              size: 50,
-              color: iconColor,
+          ],
+        ),
+        child: TextField(
+          onChanged: onQueryChanged,
+          decoration: InputDecoration(
+            hintText: s.searchHint,
+            prefixIcon: const Icon(Icons.search, color: Colors.black54),
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 14,
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 14,
-              color: Colors.black87,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class _SearchResultCard extends StatelessWidget {
-  final String name;
-  final String brand;
-  final String price;
+// ─── Product Card ─────────────────────────────────────────────────────────────
 
-  const _SearchResultCard({
-    required this.name,
-    required this.brand,
-    required this.price,
-  });
+class _ProductCard extends StatelessWidget {
+  final ProductSearchModel product;
+  const _ProductCard({required this.product});
 
   @override
   Widget build(BuildContext context) {
     return InkWell(
       borderRadius: BorderRadius.circular(18),
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const ProductDetailsScreen(),
-          ),
-        );
-      },
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ProductDetailsScreen(productId: product.id),
+        ),
+      ),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
@@ -531,6 +309,7 @@ class _SearchResultCard extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // ── صورة ──────────────────────────────
             Stack(
               children: [
                 ClipRRect(
@@ -539,15 +318,25 @@ class _SearchResultCard extends StatelessWidget {
                   ),
                   child: AspectRatio(
                     aspectRatio: 3 / 4,
-                    child: Container(
-                      color: Colors.grey[200],
-                      child: const Center(
-                        child: Icon(
-                          Icons.image_outlined,
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ),
+                    child: product.imageUrl != null
+                        ? Image.network(
+                            product.imageUrl!,
+                            fit: BoxFit.cover,
+                            loadingBuilder: (ctx, child, progress) {
+                              if (progress == null) return child;
+                              return Container(
+                                color: Colors.grey[100],
+                                child: const Center(
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.black45,
+                                  ),
+                                ),
+                              );
+                            },
+                            errorBuilder: (_, __, ___) => _placeholder(),
+                          )
+                        : _placeholder(),
                   ),
                 ),
                 Positioned(
@@ -560,19 +349,16 @@ class _SearchResultCard extends StatelessWidget {
                       color: Colors.white,
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.favorite_border,
-                      size: 18,
-                    ),
+                    child: const Icon(Icons.favorite_border, size: 18),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            // ── اسم ───────────────────────────────
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
               child: Text(
-                name,
+                product.name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
@@ -581,20 +367,21 @@ class _SearchResultCard extends StatelessWidget {
                 ),
               ),
             ),
+            // ── براند · كاتيجوري ──────────────────
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Text(
-                brand,
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: Colors.black54,
-                ),
+                '${product.brandName} · ${product.categoryName}',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 11, color: Colors.black54),
               ),
             ),
+            // ── سعر ───────────────────────────────
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
               child: Text(
-                price,
+                'From \$${product.minPrice.toStringAsFixed(2)}',
                 style: const TextStyle(
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
@@ -606,15 +393,63 @@ class _SearchResultCard extends StatelessWidget {
       ),
     );
   }
+
+  Widget _placeholder() {
+    return Container(
+      color: Colors.grey[200],
+      child: const Center(
+        child: Icon(Icons.image_outlined, color: Colors.grey),
+      ),
+    );
+  }
 }
 
-class _BottomItem extends StatelessWidget {
+// ─── Empty State ──────────────────────────────────────────────────────────────
+
+class _EmptyState extends StatelessWidget {
+  final String title;
+  final bool isError;
+  const _EmptyState({required this.title, required this.isError});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 130,
+            height: 130,
+            decoration: const BoxDecoration(
+              color: Color(0xFFF2F2F2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.search,
+              size: 50,
+              color: isError ? Colors.redAccent : Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 14, color: Colors.black87),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Nav Item ─────────────────────────────────────────────────────────────────
+
+class _NavItem extends StatelessWidget {
   final IconData icon;
   final String label;
   final bool isActive;
   final VoidCallback? onTap;
 
-  const _BottomItem({
+  const _NavItem({
     required this.icon,
     required this.label,
     this.isActive = false,
@@ -624,18 +459,13 @@ class _BottomItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isActive ? Colors.black : Colors.grey;
-
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(
-            icon,
-            color: color,
-            size: 22,
-          ),
+          Icon(icon, color: color, size: 22),
           const SizedBox(height: 4),
           Text(
             label,

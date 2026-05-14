@@ -10,13 +10,12 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
+  http: ^1.2.2
   cupertino_icons: ^1.0.8
-
   flutter_localizations:
     sdk: flutter
 
-  http: ^1.2.2
+  dio: ^5.4.0
   shared_preferences: ^2.3.2
 
 dev_dependencies:
@@ -24,8 +23,11 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+  flutter_launcher_icons: ^0.13.1
+
 flutter:
   uses-material-design: true
+
   assets:
     - lib/assets/logo.png
     - lib/assets/splash1.jpg
@@ -35,3 +37,9 @@ flutter:
     - lib/assets/Group 3.png
     - lib/assets/Group 1171278176.png
     - lib/assets/rafiki.png
+    - lib/assets/icon .png
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "lib/assets/icon .png"
+  min_sdk_android: 21

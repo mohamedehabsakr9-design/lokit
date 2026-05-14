@@ -33,47 +33,45 @@ class _SignInScreenState extends State<SignInScreen> {
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter email and password'),
-        ),
+        const SnackBar(content: Text('Please enter email and password')),
       );
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      await AuthService.login(
-        email: email,
-        password: password,
-      );
+      final data = await AuthService.login(email: email, password: password);
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => const HomeScreen(
-            showSuccess: true,
+      // ✅ نتحقق إن الـ token اتحفظ فعلاً
+      final token = await AuthService.getToken();
+
+      if (token != null && token.isNotEmpty) {
+        // ✅ login ناجح — روح للهوم
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const HomeScreen(showSuccess: true),
           ),
-        ),
-      );
+        );
+      } else {
+        // ❌ الـ backend ما رجعش token — اطبع الـ response للـ debug
+        debugPrint('Login response: $data');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Login failed: No token received from server'),
+          ),
+        );
+      }
     } catch (e) {
       if (!mounted) return;
-
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login failed: $e'),
-        ),
+        SnackBar(content: Text('Login failed: $e')),
       );
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
