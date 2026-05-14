@@ -20,16 +20,34 @@ class ApiService {
     ),
   );
 
-  static Future<Map<String, String>> _authHeader() async {
+  static Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final token = prefs.getString('token') ??
+    return prefs.getString('token') ??
         prefs.getString('jwt') ??
         prefs.getString('accessToken');
+  }
 
-    debugPrint('╔════════ AUTH HEADER ════════╗');
+  static Future<void> saveToken(String token) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.setString('token', token);
+    await prefs.setString('jwt', token);
+    await prefs.setString('accessToken', token);
+  }
+
+  static Future<void> clearToken() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove('token');
+    await prefs.remove('jwt');
+    await prefs.remove('accessToken');
+  }
+
+  static Future<Map<String, String>> _authHeader() async {
+    final token = await getToken();
+
     debugPrint('Has Token: ${token != null && token.isNotEmpty}');
-    debugPrint('╚═════════════════════════════╝');
 
     if (token != null && token.isNotEmpty) {
       return {
@@ -45,93 +63,108 @@ class ApiService {
     bool withAuth = false,
     Map<String, dynamic>? queryParameters,
   }) async {
-    final headers = withAuth ? await _authHeader() : <String, String>{};
+    try {
+      final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await _dio.get(
-      endpoint,
-      queryParameters: queryParameters,
-      options: Options(headers: headers),
-    );
+      final response = await _dio.get(
+        endpoint,
+        queryParameters: queryParameters,
+        options: Options(headers: headers),
+      );
 
-    return _handleResponse(response);
+      return _handleResponse(response);
+    } on DioException catch (e) {
+      throw Exception(_dioErrorMessage(e));
+    }
   }
 
   static Future<dynamic> post(
     String endpoint,
-    Map<String, dynamic> body, {
+    Map<String, dynamic>? body, {
     bool withAuth = false,
   }) async {
-    final headers = withAuth ? await _authHeader() : <String, String>{};
+    try {
+      final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    debugPrint('╔════════ API REQUEST ════════╗');
-    debugPrint('URL  : ${ApiConstants.baseUrl}$endpoint');
-    debugPrint('BODY : $body');
-    debugPrint('╚═════════════════════════════╝');
+      final response = await _dio.post(
+        endpoint,
+        data: body,
+        options: Options(headers: headers),
+      );
 
-    final response = await _dio.post(
-      endpoint,
-      data: body,
-      options: Options(headers: headers),
-    );
-
-    return _handleResponse(response);
+      return _handleResponse(response);
+    } on DioException catch (e) {
+      throw Exception(_dioErrorMessage(e));
+    }
   }
 
   static Future<dynamic> put(
     String endpoint,
-    Map<String, dynamic> body, {
+    Map<String, dynamic>? body, {
     bool withAuth = false,
   }) async {
-    final headers = withAuth ? await _authHeader() : <String, String>{};
+    try {
+      final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await _dio.put(
-      endpoint,
-      data: body,
-      options: Options(headers: headers),
-    );
+      final response = await _dio.put(
+        endpoint,
+        data: body,
+        options: Options(headers: headers),
+      );
 
-    return _handleResponse(response);
+      return _handleResponse(response);
+    } on DioException catch (e) {
+      throw Exception(_dioErrorMessage(e));
+    }
   }
 
   static Future<dynamic> patch(
     String endpoint,
-    Map<String, dynamic> body, {
+    Map<String, dynamic>? body, {
     bool withAuth = false,
   }) async {
-    final headers = withAuth ? await _authHeader() : <String, String>{};
+    try {
+      final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await _dio.patch(
-      endpoint,
-      data: body,
-      options: Options(headers: headers),
-    );
+      final response = await _dio.patch(
+        endpoint,
+        data: body,
+        options: Options(headers: headers),
+      );
 
-    return _handleResponse(response);
+      return _handleResponse(response);
+    } on DioException catch (e) {
+      throw Exception(_dioErrorMessage(e));
+    }
   }
 
   static Future<dynamic> delete(
     String endpoint, {
     bool withAuth = false,
+    Map<String, dynamic>? body,
   }) async {
-    final headers = withAuth ? await _authHeader() : <String, String>{};
+    try {
+      final headers = withAuth ? await _authHeader() : <String, String>{};
 
-    final response = await _dio.delete(
-      endpoint,
-      options: Options(headers: headers),
-    );
+      final response = await _dio.delete(
+        endpoint,
+        data: body,
+        options: Options(headers: headers),
+      );
 
-    return _handleResponse(response);
+      return _handleResponse(response);
+    } on DioException catch (e) {
+      throw Exception(_dioErrorMessage(e));
+    }
   }
 
   static dynamic _handleResponse(Response response) {
     final statusCode = response.statusCode ?? 0;
     final body = response.data;
 
-    debugPrint('╔════════ API RESPONSE ════════╗');
-    debugPrint('STATUS : $statusCode');
-    debugPrint('URL    : ${response.realUri}');
-    debugPrint('BODY   : $body');
-    debugPrint('╚═════════════════════════════╝');
+    debugPrint('STATUS: $statusCode');
+    debugPrint('URL: ${response.realUri}');
+    debugPrint('BODY: $body');
 
     if (statusCode >= 200 && statusCode < 300) {
       return body;
@@ -139,11 +172,20 @@ class ApiService {
 
     String errorMessage = 'Request failed: $statusCode';
 
+    if (statusCode == 401) {
+      errorMessage = 'Unauthorized. Please login again.';
+    } else if (statusCode == 403) {
+      errorMessage = 'Forbidden. You do not have permission.';
+    } else if (statusCode == 404) {
+      errorMessage = 'Not found.';
+    }
+
     if (body is Map) {
       final msg = body['message'] ??
           body['error'] ??
           body['msg'] ??
-          body['detail'];
+          body['detail'] ??
+          body['errors'];
 
       if (msg != null) {
         errorMessage = msg.toString();
@@ -153,5 +195,32 @@ class ApiService {
     }
 
     throw Exception(errorMessage);
+  }
+
+  static String _dioErrorMessage(DioException e) {
+    final response = e.response;
+
+    if (response != null) {
+      try {
+        _handleResponse(response);
+      } catch (err) {
+        return err.toString().replaceFirst('Exception: ', '');
+      }
+    }
+
+    switch (e.type) {
+      case DioExceptionType.connectionTimeout:
+        return 'Connection timeout. Check your internet.';
+      case DioExceptionType.receiveTimeout:
+        return 'Receive timeout. Try again.';
+      case DioExceptionType.sendTimeout:
+        return 'Send timeout. Try again.';
+      case DioExceptionType.connectionError:
+        return 'Connection error. Check your internet.';
+      case DioExceptionType.cancel:
+        return 'Request cancelled.';
+      default:
+        return e.message ?? 'Network error.';
+    }
   }
 }

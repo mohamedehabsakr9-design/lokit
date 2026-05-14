@@ -1,26 +1,83 @@
 import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
+import '../../services/api_service.dart';
 import 'order_details_screen.dart';
 
-class MyOrdersScreen extends StatelessWidget {
+class MyOrdersScreen extends StatefulWidget {
   const MyOrdersScreen({super.key});
+
+  @override
+  State<MyOrdersScreen> createState() => _MyOrdersScreenState();
+}
+
+class _MyOrdersScreenState extends State<MyOrdersScreen> {
+  bool _isLoading = true;
+  String? _error;
+  List<dynamic> _orders = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrders();
+  }
+
+  Future<void> _loadOrders() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await ApiService.get(
+        '/orders',
+        withAuth: true,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _orders = _extractOrders(data);
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  List<dynamic> _extractOrders(dynamic data) {
+    if (data is List) return data;
+    if (data is Map && data['content'] is List) return data['content'];
+    if (data is Map && data['orders'] is List) return data['orders'];
+    if (data is Map && data['data'] is List) return data['data'];
+    if (data is Map && data['items'] is List) return data['items'];
+    return [];
+  }
+
+  bool _isPending(dynamic order) {
+    final status = _readString(order, 'status').toLowerCase();
+
+    return status.contains('pending') ||
+        status.contains('processing') ||
+        status.contains('created') ||
+        status.contains('new') ||
+        status.contains('waiting');
+  }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
-    // هنا ممكن تستبدلها بقائمة ديناميكية من API
-    final dummyOrders = List.generate(4, (index) {
-      final isPending = index.isEven;
-      return OrderListItemData(
-        id: '#ORD-580$index',
-        amountText: '3000 EGP',
-        statusText: isPending ? s.orderStatusPending : s.orderStatusCompleted,
-        isPending: isPending,
-        dateTimeText: '5 / 5 / 2025 3:45 Pm',
-      );
-    });
+    final pendingOrders =
+        _orders.where((order) => _isPending(order)).toList(growable: false);
+
+    final completedOrders =
+        _orders.where((order) => !_isPending(order)).toList(growable: false);
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -37,7 +94,7 @@ class MyOrdersScreen extends StatelessWidget {
             ),
             centerTitle: true,
             title: Text(
-              s.myOrdersTitle, // "My Orders"
+              s.myOrdersTitle,
               style: const TextStyle(
                 color: Colors.black,
                 fontSize: 18,
@@ -62,73 +119,120 @@ class MyOrdersScreen extends StatelessWidget {
                     labelColor: Colors.white,
                     unselectedLabelColor: Colors.black87,
                     tabs: [
-                      Tab(text: s.myOrdersPendingTab), // "Pending"
-                      Tab(text: s.myOrdersCompletedTab), // "Completed"
+                      Tab(text: s.myOrdersPendingTab),
+                      Tab(text: s.myOrdersCompletedTab),
                     ],
                   ),
                 ),
               ),
             ),
           ),
-          body: TabBarView(
-            children: [
-              _OrdersList(
-                orders:
-                    dummyOrders.where((o) => o.isPending).toList(growable: false),
-              ),
-              _OrdersList(
-                orders: dummyOrders
-                    .where((o) => !o.isPending)
-                    .toList(growable: false),
-              ),
-            ],
+          body: RefreshIndicator(
+            onRefresh: _loadOrders,
+            child: _buildBody(
+              s: s,
+              pendingOrders: pendingOrders,
+              completedOrders: completedOrders,
+            ),
           ),
         ),
       ),
     );
   }
-}
 
-class OrderListItemData {
-  final String id;
-  final String amountText;
-  final String statusText;
-  final bool isPending;
-  final String dateTimeText;
+  Widget _buildBody({
+    required AppStrings s,
+    required List<dynamic> pendingOrders,
+    required List<dynamic> completedOrders,
+  }) {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
 
-  OrderListItemData({
-    required this.id,
-    required this.amountText,
-    required this.statusText,
-    required this.isPending,
-    required this.dateTimeText,
-  });
+    if (_error != null) {
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 180),
+          const Icon(Icons.error_outline, color: Colors.red, size: 44),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Center(
+            child: ElevatedButton(
+              onPressed: _loadOrders,
+              child: const Text('Try again'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    return TabBarView(
+      children: [
+        _OrdersList(
+          orders: pendingOrders,
+          emptyText: s.myOrdersEmptyText,
+        ),
+        _OrdersList(
+          orders: completedOrders,
+          emptyText: s.myOrdersEmptyText,
+        ),
+      ],
+    );
+  }
 }
 
 class _OrdersList extends StatelessWidget {
-  final List<OrderListItemData> orders;
+  final List<dynamic> orders;
+  final String emptyText;
 
-  const _OrdersList({required this.orders});
+  const _OrdersList({
+    required this.orders,
+    required this.emptyText,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
 
     if (orders.isEmpty) {
-      return Center(
-        child: Text(
-          s.myOrdersEmptyText,
-          style: const TextStyle(color: Colors.black54),
-        ),
+      return ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [
+          const SizedBox(height: 180),
+          const Icon(Icons.receipt_long_outlined, color: Colors.grey, size: 46),
+          const SizedBox(height: 12),
+          Center(
+            child: Text(
+              emptyText,
+              style: const TextStyle(color: Colors.black54),
+            ),
+          ),
+        ],
       );
     }
 
     return ListView.separated(
+      physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(16),
       itemCount: orders.length,
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final order = orders[index];
+
+        final orderId = _extractOrderId(order);
+        final isPending = _isPending(order);
+        final amountText = _extractAmount(order);
+        final statusText = _extractStatus(order, s);
+        final dateText = _extractDate(order);
+
         return InkWell(
           borderRadius: BorderRadius.circular(18),
           onTap: () {
@@ -136,8 +240,8 @@ class _OrdersList extends StatelessWidget {
               context,
               MaterialPageRoute(
                 builder: (_) => OrderDetailsScreen(
-                  orderId: order.id,
-                  isCompleted: !order.isPending,
+                  orderId: orderId,
+                  isCompleted: !isPending,
                 ),
               ),
             );
@@ -165,7 +269,7 @@ class _OrdersList extends StatelessWidget {
                     color: Colors.grey[300],
                     child: const Center(
                       child: Icon(
-                        Icons.person_outline,
+                        Icons.receipt_long_outlined,
                         color: Colors.grey,
                       ),
                     ),
@@ -177,7 +281,7 @@ class _OrdersList extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        '${s.myOrdersOrderLabel} ${order.id}', // "Order #ORD-5801"
+                        '${s.myOrdersOrderLabel} $orderId',
                         style: const TextStyle(
                           fontSize: 13,
                           fontWeight: FontWeight.w600,
@@ -185,7 +289,7 @@ class _OrdersList extends StatelessWidget {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        '${s.myOrdersDateTimeLabel} : ${order.dateTimeText}',
+                        '${s.myOrdersDateTimeLabel} : $dateText',
                         style: const TextStyle(
                           fontSize: 11,
                           color: Colors.black54,
@@ -197,18 +301,16 @@ class _OrdersList extends StatelessWidget {
                           Icon(
                             Icons.circle,
                             size: 8,
-                            color: order.isPending
-                                ? Colors.deepOrange
-                                : Colors.green,
+                            color:
+                                isPending ? Colors.deepOrange : Colors.green,
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            order.statusText,
+                            statusText,
                             style: TextStyle(
                               fontSize: 11,
-                              color: order.isPending
-                                  ? Colors.deepOrange
-                                  : Colors.green,
+                              color:
+                                  isPending ? Colors.deepOrange : Colors.green,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -222,7 +324,7 @@ class _OrdersList extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
                     Text(
-                      order.amountText,
+                      amountText,
                       style: const TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.w700,
@@ -230,7 +332,7 @@ class _OrdersList extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      s.myOrdersDetailsButton, // "Details"
+                      s.myOrdersDetailsButton,
                       style: const TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -246,4 +348,70 @@ class _OrdersList extends StatelessWidget {
       },
     );
   }
+
+  static String _extractOrderId(dynamic order) {
+    final id = _readDynamic(order, 'id') ??
+        _readDynamic(order, 'orderId') ??
+        _readDynamic(order, 'orderNumber');
+
+    if (id == null) return '#ORDER';
+    final value = id.toString();
+
+    return value.startsWith('#') ? value : '#$value';
+  }
+
+  static bool _isPending(dynamic order) {
+    final status = _readString(order, 'status').toLowerCase();
+
+    return status.contains('pending') ||
+        status.contains('processing') ||
+        status.contains('created') ||
+        status.contains('new') ||
+        status.contains('waiting');
+  }
+
+  static String _extractAmount(dynamic order) {
+    final amount = _readDynamic(order, 'totalAmount') ??
+        _readDynamic(order, 'totalPrice') ??
+        _readDynamic(order, 'amount') ??
+        _readDynamic(order, 'total');
+
+    if (amount == null) return '0 EGP';
+
+    return '$amount EGP';
+  }
+
+  static String _extractStatus(dynamic order, AppStrings s) {
+    final status = _readString(order, 'status');
+
+    if (status.isNotEmpty) return status;
+
+    return _isPending(order) ? s.orderStatusPending : s.orderStatusCompleted;
+  }
+
+  static String _extractDate(dynamic order) {
+    final date = _readString(order, 'createdAt').isNotEmpty
+        ? _readString(order, 'createdAt')
+        : _readString(order, 'orderDate');
+
+    if (date.isEmpty) return '-';
+
+    return date.replaceFirst('T', ' ').split('.').first;
+  }
+
+  static dynamic _readDynamic(dynamic item, String key) {
+    if (item is Map && item[key] != null) return item[key];
+    return null;
+  }
+
+  static String _readString(dynamic item, String key) {
+    final value = _readDynamic(item, key);
+    if (value == null) return '';
+    return value.toString();
+  }
+}
+
+String _readString(dynamic item, String key) {
+  if (item is Map && item[key] != null) return item[key].toString();
+  return '';
 }

@@ -1,11 +1,7 @@
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 
 class AuthService {
-  static const String baseUrl = "https://lokit-production.up.railway.app";
-
-  // ===================== تسجيل الدخول =====================
   static Future<dynamic> login({
     required String email,
     required String password,
@@ -13,7 +9,7 @@ class AuthService {
     final data = await ApiService.post(
       '/auth/login',
       {
-        'email': email,
+        'email': email.trim(),
         'password': password,
       },
     );
@@ -22,15 +18,10 @@ class AuthService {
     debugPrint(data.toString());
     debugPrint('======================');
 
-    final token = data['token'] ??
-        data['accessToken'] ??
-        data['access_token'] ??
-        data['jwt'] ??
-        data['Authorization'];
+    final token = _extractToken(data);
 
-    if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', token.toString());
+    if (token != null && token.isNotEmpty) {
+      await ApiService.saveToken(token);
       debugPrint('✅ Token saved!');
     } else {
       debugPrint('❌ No token found in response!');
@@ -39,7 +30,6 @@ class AuthService {
     return data;
   }
 
-  // ===================== تسجيل مستخدم جديد =====================
   static Future<dynamic> register({
     required String firstName,
     required String lastName,
@@ -50,68 +40,50 @@ class AuthService {
     final data = await ApiService.post(
       '/auth/register',
       {
-        'firstName': firstName,
-        'lastName': lastName,
-        'email': email,
+        'firstName': firstName.trim(),
+        'lastName': lastName.trim(),
+        'email': email.trim(),
         'password': password,
-        'phone': phone,
+        'phone': phone.trim(),
       },
     );
 
     debugPrint('=== REGISTER RESPONSE ===');
     debugPrint(data.toString());
+    debugPrint('=========================');
 
-    final token = data['token'] ??
-        data['accessToken'] ??
-        data['access_token'] ??
-        data['jwt'];
+    final token = _extractToken(data);
 
-    if (token != null) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', token.toString());
+    if (token != null && token.isNotEmpty) {
+      await ApiService.saveToken(token);
+      debugPrint('✅ Token saved!');
     }
 
     return data;
   }
 
-  // ===================== تغيير الباسورد =====================
   static Future<dynamic> changePassword({
     required String oldPassword,
     required String newPassword,
     required String confirmNewPassword,
   }) async {
-    final token = await getToken();
+    final token = await ApiService.getToken();
 
-    if (token == null) {
-      throw Exception(
-        "User not logged in / الرجاء تسجيل الدخول أولاً",
-      );
+    if (token == null || token.isEmpty) {
+      throw Exception('User not logged in / الرجاء تسجيل الدخول أولاً');
     }
 
-    try {
-      final response = await ApiService.patch(
-        '/account/password',
-        {
-          'oldPassword': oldPassword,
-          'newPassword': newPassword,
-          'confirmNewPassword': confirmNewPassword,
-        },
-        withAuth: true,
-      );
-
-      return response;
-    } catch (e) {
-      if (e.toString().contains('403')) {
-        throw Exception(
-          "Forbidden: Old password might be wrong or user not authorized",
-        );
-      }
-
-      rethrow;
-    }
+    return ApiService.patch(
+      '/account/password',
+      {
+        'oldPassword': oldPassword,
+        'newPassword': newPassword,
+        'confirmNewPassword': confirmNewPassword,
+      },
+      withAuth: true,
+    );
   }
 
-  // ===================== طلب إعادة تعيين الباسورد =====================
   static Future<bool> forgotPassword({
     required String email,
   }) async {
@@ -119,29 +91,17 @@ class AuthService {
       final response = await ApiService.post(
         '/auth/forgot-password',
         {
-          'email': email,
+          'email': email.trim(),
         },
       );
 
-      if (response == null) return false;
-
-      if (response['success'] != null) {
-        return response['success'] == true;
-      }
-
-      if (response['message'] != null ||
-          response['token'] != null) {
-        return true;
-      }
-
-      return true;
+      return _isSuccess(response);
     } catch (e) {
       debugPrint('❌ forgotPassword error: $e');
       return false;
     }
   }
 
-  // ===================== التحقق من كود OTP =====================
   static Future<bool> verifyResetCode({
     required String email,
     required String code,
@@ -150,29 +110,18 @@ class AuthService {
       final response = await ApiService.post(
         '/auth/verify-reset-code',
         {
-          'email': email,
-          'code': code,
+          'email': email.trim(),
+          'code': code.trim(),
         },
       );
 
-      if (response == null) return false;
-
-      if (response['success'] != null) {
-        return response['success'] == true;
-      }
-
-      if (response['message'] != null) {
-        return true;
-      }
-
-      return true;
+      return _isSuccess(response);
     } catch (e) {
       debugPrint('❌ verifyResetCode error: $e');
       return false;
     }
   }
 
-  // ===================== إعادة تعيين الباسورد =====================
   static Future<bool> resetPassword({
     required String email,
     required String otp,
@@ -182,49 +131,109 @@ class AuthService {
       final response = await ApiService.post(
         '/auth/reset-password',
         {
-          'email': email,
-          'otp': otp,
+          'email': email.trim(),
+          'otp': otp.trim(),
           'newPassword': newPassword,
         },
       );
 
-      if (response == null) return false;
-
-      if (response['success'] != null) {
-        return response['success'] == true;
-      }
-
-      if (response['message'] != null ||
-          response['token'] != null) {
-        return true;
-      }
-
-      return true;
+      return _isSuccess(response);
     } catch (e) {
       debugPrint('❌ resetPassword error: $e');
       return false;
     }
   }
 
-  // ===================== التحقق من تسجيل الدخول =====================
   static Future<bool> isLoggedIn() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('token');
-
+    final token = await ApiService.getToken();
     return token != null && token.isNotEmpty;
   }
 
-  // ===================== جلب التوكن =====================
   static Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('token');
+    return ApiService.getToken();
   }
 
-  // ===================== تسجيل الخروج =====================
   static Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('token');
-
+    await ApiService.clearToken();
     debugPrint('✅ Token cleared — user logged out');
+  }
+
+  static String? _extractToken(dynamic data) {
+    if (data == null) return null;
+
+    if (data is String && data.isNotEmpty) {
+      return data.replaceFirst('Bearer ', '');
+    }
+
+    if (data is Map) {
+      final directToken = data['token'] ??
+          data['accessToken'] ??
+          data['access_token'] ??
+          data['jwt'] ??
+          data['Authorization'] ??
+          data['authorization'];
+
+      if (directToken != null) {
+        return directToken.toString().replaceFirst('Bearer ', '');
+      }
+
+      final nestedData = data['data'];
+      if (nestedData is Map) {
+        final nestedToken = nestedData['token'] ??
+            nestedData['accessToken'] ??
+            nestedData['access_token'] ??
+            nestedData['jwt'];
+
+        if (nestedToken != null) {
+          return nestedToken.toString().replaceFirst('Bearer ', '');
+        }
+      }
+
+      final user = data['user'];
+      if (user is Map) {
+        final userToken = user['token'] ??
+            user['accessToken'] ??
+            user['access_token'] ??
+            user['jwt'];
+
+        if (userToken != null) {
+          return userToken.toString().replaceFirst('Bearer ', '');
+        }
+      }
+    }
+
+    return null;
+  }
+
+  static bool _isSuccess(dynamic response) {
+    if (response == null) return true;
+
+    if (response is bool) return response;
+
+    if (response is String) {
+      return response.toLowerCase().contains('success') ||
+          response.toLowerCase().contains('sent') ||
+          response.toLowerCase().contains('done') ||
+          response.toLowerCase().contains('ok');
+    }
+
+    if (response is Map) {
+      if (response['success'] != null) {
+        return response['success'] == true;
+      }
+
+      if (response['status'] != null) {
+        final status = response['status'].toString().toLowerCase();
+        if (status == 'success' || status == 'ok') return true;
+      }
+
+      if (response['message'] != null ||
+          response['token'] != null ||
+          response['accessToken'] != null) {
+        return true;
+      }
+    }
+
+    return true;
   }
 }

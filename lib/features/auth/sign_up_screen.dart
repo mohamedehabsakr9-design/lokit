@@ -1,4 +1,3 @@
-// sign_up_screen.dart
 import 'package:flutter/material.dart';
 import 'sign_in_screen.dart';
 import '../home/home_screen.dart';
@@ -46,50 +45,33 @@ class _SignUpScreenState extends State<SignUpScreen> {
     final password = _passwordController.text.trim();
     final confirmPassword = _confirmPasswordController.text.trim();
 
-    // ── التحقق من الحقول الفاضية
     if (firstName.isEmpty ||
         lastName.isEmpty ||
         email.isEmpty ||
         phone.isEmpty ||
         password.isEmpty ||
         confirmPassword.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(s.pleaseFillAllFields)),
-      );
+      _showMessage(s.pleaseFillAllFields);
       return;
     }
 
-    // ── التحقق من صيغة الإيميل
     if (!email.contains('@') || !email.contains('.')) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid email address')),
-      );
+      _showMessage('Invalid email address');
       return;
     }
 
-    // ── التحقق من رقم الهاتف (أرقام فقط)
     if (phone.length < 10 || !RegExp(r'^\d+$').hasMatch(phone)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Enter a valid phone number')),
-      );
+      _showMessage('Enter a valid phone number');
       return;
     }
 
-    // ✅ التحقق من طول الباسورد — السبب الرئيسي للـ 400
     if (password.length < 8) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Password must be at least 8 characters')),
-      );
+      _showMessage('Password must be at least 8 characters');
       return;
     }
 
-    // ── التحقق من تطابق الباسورد
     if (password != confirmPassword) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-            content: Text('Password and confirm password do not match')),
-      );
+      _showMessage('Password and confirm password do not match');
       return;
     }
 
@@ -106,23 +88,21 @@ class _SignUpScreenState extends State<SignUpScreen> {
 
       if (!mounted) return;
 
-      // ✅ التحقق إن الـ token اتحفظ بعد التسجيل
       final token = await AuthService.getToken();
 
       if (token != null && token.isNotEmpty) {
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(builder: (_) => const HomeScreen()),
+          (route) => false,
         );
       } else {
-        // ✅ لو مفيش token — ممكن الـ backend محتاج تأكيد إيميل أو حاجة تانية
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              data?['message'] ?? 'Account created! Please sign in.',
-            ),
-          ),
-        );
+        final message = data is Map && data['message'] != null
+            ? data['message'].toString()
+            : 'Account created! Please sign in.';
+
+        _showMessage(message);
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(builder: (_) => const SignInScreen()),
@@ -131,24 +111,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
     } catch (e) {
       if (!mounted) return;
 
-      // ✅ رسائل خطأ واضحة حسب نوع الـ error
-      String errorMsg = 'Sign up failed. Please try again.';
-      final err = e.toString();
+      final err = e.toString().replaceFirst('Exception: ', '').toLowerCase();
 
-      if (err.contains('400')) {
+      String errorMsg = 'Sign up failed. Please try again.';
+
+      if (err.contains('400') || err.contains('invalid')) {
         errorMsg = 'Invalid data. Please check your information.';
-      } else if (err.contains('409') || err.contains('already')) {
+      } else if (err.contains('409') ||
+          err.contains('already') ||
+          err.contains('exist')) {
         errorMsg = 'Email already registered. Please sign in.';
       } else if (err.contains('email')) {
         errorMsg = 'Invalid email address.';
+      } else {
+        errorMsg = e.toString().replaceFirst('Exception: ', '');
       }
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(errorMsg)),
-      );
+      _showMessage(errorMsg);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -161,203 +149,262 @@ class _SignUpScreenState extends State<SignUpScreen> {
       child: Scaffold(
         backgroundColor: const Color(0xFFE5E5E5),
         body: SafeArea(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Text(
-                  s.signUpTitle,
-                  style: const TextStyle(
-                      fontSize: 26, fontWeight: FontWeight.w600),
-                  textAlign: TextAlign.center,
+          child: Column(
+            children: [
+              const SizedBox(height: 24),
+              SizedBox(
+                height: 70,
+                child: Image.asset(
+                  'lib/assets/logo.png',
+                  fit: BoxFit.contain,
                 ),
-                const SizedBox(height: 24),
-
-                // ── First Name
-                Text(s.signUpFirstName),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _firstNameController,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpFirstName,
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+              ),
+              const SizedBox(height: 20),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  decoration: const BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.vertical(
+                      top: Radius.circular(32),
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Last Name
-                Text(s.signUpLastName),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _lastNameController,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpLastName,
-                    prefixIcon: const Icon(Icons.person_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 24,
+                      vertical: 28,
                     ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Email
-                Text(s.signUpEmailLabel),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpEmailLabel,
-                    prefixIcon: const Icon(Icons.mail_outline),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Phone
-                Text(s.signUpPhone),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _phoneController,
-                  keyboardType: TextInputType.phone,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpPhone,
-                    prefixIcon: const Icon(Icons.phone),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Password
-                Text(s.signUpPassword),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: _obscurePassword,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpPassword,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    // ✅ hint للمستخدم إن الباسورد لازم 8 أحرف
-                    helperText: 'At least 8 characters',
-                    helperStyle: const TextStyle(
-                      fontSize: 11,
-                      color: Colors.black45,
-                    ),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscurePassword
-                          ? Icons.visibility
-                          : Icons.visibility_off),
-                      onPressed: () {
-                        setState(() => _obscurePassword = !_obscurePassword);
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // ── Confirm Password
-                Text(s.signUpConfirmPassword),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _confirmPasswordController,
-                  obscureText: _obscureConfirm,
-                  textAlign: isArabic ? TextAlign.right : TextAlign.left,
-                  decoration: InputDecoration(
-                    hintText: s.signUpConfirmPassword,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscureConfirm
-                          ? Icons.visibility
-                          : Icons.visibility_off),
-                      onPressed: () {
-                        setState(() => _obscureConfirm = !_obscureConfirm);
-                      },
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ── زر Sign Up
-                SizedBox(
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _register,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black87,
-                      disabledBackgroundColor: Colors.black54,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: Colors.white,
-                            ),
-                          )
-                        : Text(
-                            s.signUpButton,
-                            style: const TextStyle(fontSize: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Text(
+                          s.signUpTitle,
+                          style: const TextStyle(
+                            fontSize: 26,
+                            fontWeight: FontWeight.w600,
                           ),
-                  ),
-                ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 24),
 
-                const SizedBox(height: 16),
+                        Text(s.signUpFirstName),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _firstNameController,
+                          enabled: !_isLoading,
+                          textInputAction: TextInputAction.next,
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpFirstName,
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
 
-                Center(
-                  child: GestureDetector(
-                    onTap: _isLoading
-                        ? null
-                        : () {
-                            Navigator.pushReplacement(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const SignInScreen(),
+                        Text(s.signUpLastName),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _lastNameController,
+                          enabled: !_isLoading,
+                          textInputAction: TextInputAction.next,
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpLastName,
+                            prefixIcon: const Icon(Icons.person_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(s.signUpEmailLabel),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _emailController,
+                          enabled: !_isLoading,
+                          keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpEmailLabel,
+                            prefixIcon: const Icon(Icons.mail_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(s.signUpPhone),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _phoneController,
+                          enabled: !_isLoading,
+                          keyboardType: TextInputType.phone,
+                          textInputAction: TextInputAction.next,
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpPhone,
+                            prefixIcon: const Icon(Icons.phone),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(s.signUpPassword),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _passwordController,
+                          enabled: !_isLoading,
+                          obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.next,
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpPassword,
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            helperText: 'At least 8 characters',
+                            helperStyle: const TextStyle(
+                              fontSize: 11,
+                              color: Colors.black45,
+                            ),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
                               ),
-                            );
-                          },
-                    child: Text.rich(
-                      TextSpan(
-                        text: s.signUpAlreadyHave,
-                        children: [
-                          TextSpan(
-                            text: s.signUpSignIn,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.underline,
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                        ],
-                      ),
-                      textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(s.signUpConfirmPassword),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _confirmPasswordController,
+                          enabled: !_isLoading,
+                          obscureText: _obscureConfirm,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (!_isLoading) _register();
+                          },
+                          textAlign:
+                              isArabic ? TextAlign.right : TextAlign.left,
+                          decoration: InputDecoration(
+                            hintText: s.signUpConfirmPassword,
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscureConfirm
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _obscureConfirm = !_obscureConfirm;
+                                      });
+                                    },
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _register,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black87,
+                              disabledBackgroundColor: Colors.black54,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 22,
+                                    height: 22,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Text(
+                                    s.signUpButton,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        Center(
+                          child: GestureDetector(
+                            onTap: _isLoading
+                                ? null
+                                : () {
+                                    Navigator.pushReplacement(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => const SignInScreen(),
+                                      ),
+                                    );
+                                  },
+                            child: Text.rich(
+                              TextSpan(
+                                text: s.signUpAlreadyHave,
+                                children: [
+                                  TextSpan(
+                                    text: s.signUpSignIn,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                      decoration: TextDecoration.underline,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+                      ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

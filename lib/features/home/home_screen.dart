@@ -1,253 +1,118 @@
 import 'package:flutter/material.dart';
-import '../notifications/notification_screen.dart';
-import '../profile/profile_menu_screen.dart';
-import '../products/product_details_screen.dart';
 import '../../app/app_strings.dart';
 import '../../services/product_service.dart';
-
-import '../products/search_screen.dart';
-import '../wishlist/wishlist_screen.dart';
 import '../cart/my_cart_screen.dart';
+import '../products/product_details_screen.dart';
+import '../products/search_screen.dart';
+import '../profile/profile_menu_screen.dart';
+import '../wishlist/wishlist_screen.dart';
+
+const String kBaseUrl = 'https://lokit-production.up.railway.app';
 
 class HomeScreen extends StatefulWidget {
-  final bool showSuccess;
-
-  const HomeScreen({
-    super.key,
-    this.showSuccess = false,
-  });
+  const HomeScreen({super.key});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  late bool _showSuccessOverlay;
-
-  String _searchQuery = '';
-  bool _isLoadingProducts = true;
-  String? _productsError;
-  List<dynamic> _products = [];
+  List<dynamic> products = [];
+  bool loading = true;
+  bool showSuccessOverlay = false;
+  String searchQuery = '';
+  String? departmentFilter;
 
   @override
   void initState() {
     super.initState();
-    _showSuccessOverlay = widget.showSuccess;
-    _loadProducts();
+    loadProducts();
   }
 
-  Future<void> _loadProducts() async {
-    setState(() {
-      _isLoadingProducts = true;
-      _productsError = null;
-    });
-
+  Future<void> loadProducts() async {
     try {
-      final products = await ProductService.getProducts();
+      final result = await ProductService.getProducts();
 
       if (!mounted) return;
 
       setState(() {
-        _products = products;
-        _isLoadingProducts = false;
+        products = result;
+        loading = false;
       });
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _productsError = e.toString();
-        _isLoadingProducts = false;
+        loading = false;
       });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load products: $e')),
+      );
     }
   }
 
-  void _hideSuccessOverlay() {
+  void hideSuccessOverlay() {
     setState(() {
-      _showSuccessOverlay = false;
+      showSuccessOverlay = false;
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
-    final locale = Localizations.localeOf(context);
-    final isArabic = locale.languageCode == 'ar';
 
-    return Directionality(
-      textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
-      child: Scaffold(
-        backgroundColor: const Color(0xFFF5F5F5),
-        body: Stack(
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F7F7),
+      body: SafeArea(
+        child: Stack(
           children: [
-            SafeArea(
-              child: Column(
-                children: [
-                  const SizedBox(height: 16),
-
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            decoration: InputDecoration(
-                              hintText: s.homeSearchHint,
-                              prefixIcon: const Icon(Icons.search),
-                              filled: true,
-                              fillColor: Colors.white,
-                              contentPadding: EdgeInsets.zero,
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(24),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                            onChanged: (value) {
+            RefreshIndicator(
+              onRefresh: loadProducts,
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 110),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          _Header(
+                            onSearchChanged: (value) {
                               setState(() {
-                                _searchQuery = value;
+                                searchQuery = value;
                               });
                             },
                           ),
-                        ),
-                        const SizedBox(width: 12),
-                        InkWell(
-                          borderRadius: BorderRadius.circular(20),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => const NotificationScreen(),
-                              ),
-                            );
-                          },
-                          child: Container(
-                            width: 40,
-                            height: 40,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
-                              shape: BoxShape.circle,
-                            ),
-                            child: const Icon(Icons.notifications_none),
+                          const SizedBox(height: 18),
+
+                          const _TopBanner(),
+                          const SizedBox(height: 18),
+
+                          const _BrandRow(),
+                          const SizedBox(height: 24),
+
+                          _ProductSection(
+                            title: s.homeNewArrivals,
+                            products: products,
+                            searchQuery: searchQuery,
+                            departmentFilter: departmentFilter,
                           ),
-                        ),
-                      ],
-                    ),
-                  ),
 
-                  const SizedBox(height: 16),
+                          const SizedBox(height: 24),
 
-                  Expanded(
-                    child: RefreshIndicator(
-                      onRefresh: _loadProducts,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const _TopBanner(),
-                            const SizedBox(height: 20),
-
-                            Text(
-                              s.homeShopByBrand,
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-
-                            const SizedBox(height: 8),
-                            const _BrandRow(),
-                            const SizedBox(height: 20),
-
-                            if (_isLoadingProducts)
-                              const SizedBox(
-                                height: 260,
-                                child: Center(
-                                  child: CircularProgressIndicator(),
-                                ),
-                              )
-                            else if (_productsError != null)
-                              SizedBox(
-                                height: 260,
-                                child: Center(
-                                  child: Column(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      const Icon(
-                                        Icons.error_outline,
-                                        size: 36,
-                                        color: Colors.red,
-                                      ),
-                                      const SizedBox(height: 8),
-                                      const Text(
-                                        'Failed to load products',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 8),
-                                      ElevatedButton(
-                                        onPressed: _loadProducts,
-                                        child: const Text('Try again'),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              )
-                            else ...[
-                              _ProductSection(
-                                title: s.homeTopRated,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                              ),
-                              const SizedBox(height: 16),
-                              _ProductSection(
-                                title: s.homeMen,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                                departmentFilter: 'men',
-                              ),
-                              const SizedBox(height: 16),
-                              _ProductSection(
-                                title: s.homeWomen,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                                departmentFilter: 'women',
-                              ),
-                              const SizedBox(height: 16),
-                              _ProductSection(
-                                title: s.homeKids,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                                departmentFilter: 'kids',
-                              ),
-                              const SizedBox(height: 16),
-                              _ProductSection(
-                                title: s.homeUnisex,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                                departmentFilter: 'unisex',
-                              ),
-                              const SizedBox(height: 16),
-                              _ProductSection(
-                                title: s.homeSportsWear,
-                                products: _products,
-                                searchQuery: _searchQuery,
-                                departmentFilter: 'sports',
-                              ),
-                            ],
-
-                            const SizedBox(height: 80),
-                          ],
-                        ),
+                          _ProductSection(
+                            title: s.homeRecommended,
+                            products: products,
+                            searchQuery: searchQuery,
+                            departmentFilter: departmentFilter,
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                ],
-              ),
             ),
 
-            if (_showSuccessOverlay)
+            if (showSuccessOverlay)
               Center(
                 child: Container(
                   margin: const EdgeInsets.symmetric(horizontal: 32),
@@ -298,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       const SizedBox(height: 20),
                       TextButton(
-                        onPressed: _hideSuccessOverlay,
+                        onPressed: hideSuccessOverlay,
                         child: Text(
                           s.homeSuccessOk,
                           style: const TextStyle(
@@ -313,84 +178,149 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
           ],
         ),
-
-        bottomNavigationBar: SafeArea(
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-            padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(30),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.07),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
-                ),
-              ],
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _BottomItem(
-                  icon: Icons.home_filled,
-                  label: 'Home',
-                  isActive: true,
-                  onTap: () {},
-                ),
-                _BottomItem(
-                  icon: Icons.search,
-                  label: 'Search',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const SearchScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _BottomItem(
-                  icon: Icons.favorite_border,
-                  label: 'Wishlist',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const WishlistScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _BottomItem(
-                  icon: Icons.shopping_bag_outlined,
-                  label: 'Cart',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const MyCartScreen(),
-                      ),
-                    );
-                  },
-                ),
-                _BottomItem(
-                  icon: Icons.person_outline,
-                  label: 'Profile',
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ProfileMenuScreen(),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 22),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(30),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.07),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              _BottomItem(
+                icon: Icons.home_filled,
+                label: 'Home',
+                isActive: true,
+                onTap: () {},
+              ),
+              _BottomItem(
+                icon: Icons.search,
+                label: 'Search',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SearchScreen(),
+                    ),
+                  );
+                },
+              ),
+              _BottomItem(
+                icon: Icons.favorite_border,
+                label: 'Wishlist',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const WishlistScreen(),
+                    ),
+                  );
+                },
+              ),
+              _BottomItem(
+                icon: Icons.shopping_bag_outlined,
+                label: 'Cart',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const MyCartScreen(),
+                    ),
+                  );
+                },
+              ),
+              _BottomItem(
+                icon: Icons.person_outline,
+                label: 'Profile',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ProfileMenuScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
           ),
         ),
       ),
+    );
+  }
+}
+
+class _Header extends StatelessWidget {
+  final ValueChanged<String> onSearchChanged;
+
+  const _Header({
+    required this.onSearchChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final s = AppStrings.of(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Image.asset(
+              'lib/assets/logo.png',
+              height: 42,
+              errorBuilder: (_, __, ___) {
+                return const Text(
+                  'LOKIT',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 2,
+                  ),
+                );
+              },
+            ),
+            const Spacer(),
+            IconButton(
+              onPressed: () {},
+              icon: const Icon(Icons.notifications_none),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        Container(
+          height: 50,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.search, color: Colors.grey),
+              const SizedBox(width: 8),
+              Expanded(
+                child: TextField(
+                  onChanged: onSearchChanged,
+                  decoration: InputDecoration(
+                    hintText: s.homeSearchHint,
+                    border: InputBorder.none,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }
@@ -419,10 +349,10 @@ class _BrandRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SingleChildScrollView(
+    return const SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
-        children: const [
+        children: [
           _BrandChip(label: 'Zara'),
           _BrandChip(label: 'Nike'),
           _BrandChip(label: 'Adidas'),
@@ -468,27 +398,6 @@ class _ProductSection extends StatelessWidget {
     this.departmentFilter,
   });
 
-  String _readString(dynamic product, String key) {
-    if (product is Map && product[key] != null) {
-      return product[key].toString();
-    }
-    return '';
-  }
-
-  int _extractProductId(dynamic product) {
-    if (product is! Map) return 0;
-
-    final id = product['id'] ??
-        product['productId'] ??
-        product['productID'] ??
-        product['product_id'];
-
-    if (id == null) return 0;
-    if (id is int) return id;
-
-    return int.tryParse(id.toString()) ?? 0;
-  }
-
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
@@ -524,13 +433,13 @@ class _ProductSection extends StatelessWidget {
         Text(
           title,
           style: const TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.w600,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
           ),
         ),
         const SizedBox(height: 12),
         SizedBox(
-          height: 230,
+          height: 260,
           child: filtered.isEmpty
               ? Center(
                   child: Text(
@@ -541,7 +450,7 @@ class _ProductSection extends StatelessWidget {
               : ListView.separated(
                   scrollDirection: Axis.horizontal,
                   itemCount: filtered.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 12),
+                  separatorBuilder: (_, __) => const SizedBox(width: 14),
                   itemBuilder: (context, index) {
                     final product = filtered[index];
 
@@ -580,55 +489,93 @@ class _ProductSection extends StatelessWidget {
     );
   }
 
-  String _extractPrice(dynamic product) {
-    if (product is! Map) return '\$000';
+  static String _readString(dynamic product, String key) {
+    if (product is Map && product[key] != null) {
+      return product[key].toString();
+    }
+    return '';
+  }
+
+  static int _extractProductId(dynamic product) {
+    if (product is! Map) return 0;
+
+    final id = product['id'] ??
+        product['productId'] ??
+        product['productID'] ??
+        product['product_id'];
+
+    if (id == null) return 0;
+    if (id is int) return id;
+
+    return int.tryParse(id.toString()) ?? 0;
+  }
+
+  static String _extractPrice(dynamic product) {
+    if (product is! Map) return '0 EGP';
 
     final directPrice = product['price'];
-    if (directPrice != null) return '\$$directPrice';
+    if (directPrice != null) return '$directPrice EGP';
 
     final variants = product['variants'];
     if (variants is List && variants.isNotEmpty) {
       final firstVariant = variants.first;
       if (firstVariant is Map && firstVariant['price'] != null) {
-        return '\$${firstVariant['price']}';
+        return '${firstVariant['price']} EGP';
       }
     }
 
-    return '\$000';
+    return '0 EGP';
   }
 
-  String? _extractImageUrl(dynamic product) {
+  static String? _extractImageUrl(dynamic product) {
     if (product is! Map) return null;
 
     final imageUrl = product['imageUrl'] ??
+        product['mainImageUrl'] ??
         product['mainImage'] ??
         product['thumbnail'] ??
         product['photo'];
 
     if (imageUrl != null && imageUrl.toString().isNotEmpty) {
-      return imageUrl.toString();
+      return _fullImageUrl(imageUrl.toString());
     }
 
-    final images = product['images'];
+    final images = product['images'] ?? product['productImages'];
+
     if (images is List && images.isNotEmpty) {
       final firstImage = images.first;
 
       if (firstImage is String) {
-        return firstImage;
+        return _fullImageUrl(firstImage);
       }
 
       if (firstImage is Map) {
         final url = firstImage['url'] ??
             firstImage['imageUrl'] ??
-            firstImage['imagePath'];
+            firstImage['imagePath'] ??
+            firstImage['path'];
 
         if (url != null && url.toString().isNotEmpty) {
-          return url.toString();
+          return _fullImageUrl(url.toString());
         }
       }
     }
 
     return null;
+  }
+
+  static String _fullImageUrl(String url) {
+    if (url.isEmpty) return '';
+
+    if (url.startsWith('http')) {
+      return url;
+    }
+
+    if (url.startsWith('/')) {
+      return '$kBaseUrl$url';
+    }
+
+    return '$kBaseUrl/$url';
   }
 }
 
@@ -650,26 +597,33 @@ class _ProductCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
+      borderRadius: BorderRadius.circular(22),
       onTap: onTap,
       child: Container(
-        width: 160,
+        width: 166,
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
               borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(18),
+                top: Radius.circular(22),
               ),
               child: Container(
-                height: 140,
+                height: 160,
                 width: double.infinity,
-                color: Colors.grey[300],
-                child: imageUrl == null
+                color: Colors.grey.shade200,
+                child: imageUrl == null || imageUrl!.isEmpty
                     ? const Center(
                         child: Icon(
                           Icons.image_outlined,
@@ -690,36 +644,45 @@ class _ProductCard extends StatelessWidget {
                       ),
               ),
             ),
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
-              child: Text(
-                name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              child: Text(
-                brand,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: Colors.black54,
-                ),
-              ),
-            ),
-            const Spacer(),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-              child: Text(
-                price,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      brand,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Text(
+                        name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      price,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

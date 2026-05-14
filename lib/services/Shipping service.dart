@@ -1,9 +1,5 @@
-import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
+import 'api_service.dart';
 
-// ─── AddressRequest ───────────────────────────────────────────────────────────
-// يتطابق مع AddressRequest في الـ backend
 class AddressRequest {
   final String country;
   final String city;
@@ -19,17 +15,17 @@ class AddressRequest {
     required this.governorate,
   });
 
-  Map<String, dynamic> toJson() => {
-        'country': country,
-        'city': city,
-        'street': street,
-        'zipCode': zipCode,
-        'governorate': governorate,
-      };
+  Map<String, dynamic> toJson() {
+    return {
+      'country': country,
+      'city': city,
+      'street': street,
+      'zipCode': zipCode,
+      'governorate': governorate,
+    };
+  }
 }
 
-// ─── AddressResponse ──────────────────────────────────────────────────────────
-// يتطابق مع AddressResponse في الـ backend
 class AddressResponse {
   final int id;
   final String country;
@@ -47,89 +43,162 @@ class AddressResponse {
     required this.governorate,
   });
 
-  factory AddressResponse.fromJson(Map<String, dynamic> json) => AddressResponse(
-        id: json['id'],
-        country: json['country'] ?? '',
-        city: json['city'] ?? '',
-        street: json['street'] ?? '',
-        zipCode: json['zipCode'] ?? '',
-        governorate: json['governorate'] ?? '',
-      );
-}
-
-// ─── ShippingService ──────────────────────────────────────────────────────────
-class ShippingService {
-  // ✅ غيّر هذا لـ base URL الخاص بالـ backend
-  static const String _baseUrl = 'https://your-api-domain.com';
-
-  static Future<String?> _getToken() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString('auth_token');
+  factory AddressResponse.fromJson(Map<String, dynamic> json) {
+    return AddressResponse(
+      id: _toInt(json['id']),
+      country: _toString(json['country']),
+      city: _toString(json['city']),
+      street: _toString(json['street']),
+      zipCode: _toString(json['zipCode']),
+      governorate: _toString(json['governorate']),
+    );
   }
 
-  static Future<Map<String, String>> _headers() async {
-    final token = await _getToken();
+  Map<String, dynamic> toMapForUi() {
     return {
-      'Content-Type': 'application/json',
-      if (token != null) 'Authorization': 'Bearer $token',
+      'id': id,
+      'title': governorate.isNotEmpty ? governorate : city,
+      'details': [
+        country,
+        governorate,
+        city,
+        street,
+        zipCode,
+      ].where((e) => e.isNotEmpty).join(' - '),
+      'country': country,
+      'city': city,
+      'street': street,
+      'zipCode': zipCode,
+      'governorate': governorate,
+      'isDefault': false,
     };
   }
+}
 
-  // ── GET /addresses ────────────────────────────────────────────────────────
-  static Future<List<AddressResponse>> getAddresses() async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/addresses'),
-      headers: await _headers(),
+class ShippingService {
+  static Future<List<dynamic>> getAddresses() async {
+    final data = await ApiService.get(
+      '/addresses',
+      withAuth: true,
     );
-    _checkStatus(response);
-    final List<dynamic> data = jsonDecode(response.body);
-    return data.map((e) => AddressResponse.fromJson(e)).toList();
-  }
 
-  // ── GET /addresses/{id} ───────────────────────────────────────────────────
-  static Future<AddressResponse> getById(int addressId) async {
-    final response = await http.get(
-      Uri.parse('$_baseUrl/addresses/$addressId'),
-      headers: await _headers(),
-    );
-    _checkStatus(response);
-    return AddressResponse.fromJson(jsonDecode(response.body));
-  }
+    if (data is List) {
+      return data.map((e) {
+        if (e is Map<String, dynamic>) {
+          return AddressResponse.fromJson(e).toMapForUi();
+        }
 
-  // ── POST /addresses → 201 ─────────────────────────────────────────────────
-  static Future<AddressResponse> create(AddressRequest request) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/addresses'),
-      headers: await _headers(),
-      body: jsonEncode(request.toJson()),
-    );
-    _checkStatus(response, expectedStatus: 201);
-    return AddressResponse.fromJson(jsonDecode(response.body));
-  }
+        if (e is Map) {
+          return AddressResponse.fromJson(
+            Map<String, dynamic>.from(e),
+          ).toMapForUi();
+        }
 
-  // ── PUT /addresses/{id} ───────────────────────────────────────────────────
-  static Future<AddressResponse> update(int addressId, AddressRequest request) async {
-    final response = await http.put(
-      Uri.parse('$_baseUrl/addresses/$addressId'),
-      headers: await _headers(),
-      body: jsonEncode(request.toJson()),
-    );
-    _checkStatus(response);
-    return AddressResponse.fromJson(jsonDecode(response.body));
-  }
-
-  // ── DELETE /addresses/{id} → 204 ─────────────────────────────────────────
-  static Future<void> delete(int addressId) async {
-    final response = await http.delete(
-      Uri.parse('$_baseUrl/addresses/$addressId'),
-      headers: await _headers(),
-    );
-    _checkStatus(response, expectedStatus: 204);
-  }
-
-  static void _checkStatus(http.Response response, {int expectedStatus = 200}) {
-    if (response.statusCode != expectedStatus) {
-      throw Exception('API Error ${response.statusCode}: ${response.body}');
+        return e;
+      }).toList();
     }
+
+    if (data is Map && data['content'] is List) {
+      return (data['content'] as List).map((e) {
+        if (e is Map) {
+          return AddressResponse.fromJson(
+            Map<String, dynamic>.from(e),
+          ).toMapForUi();
+        }
+        return e;
+      }).toList();
+    }
+
+    if (data is Map && data['data'] is List) {
+      return (data['data'] as List).map((e) {
+        if (e is Map) {
+          return AddressResponse.fromJson(
+            Map<String, dynamic>.from(e),
+          ).toMapForUi();
+        }
+        return e;
+      }).toList();
+    }
+
+    return [];
   }
+
+  static Future<AddressResponse> getById(int addressId) async {
+    final data = await ApiService.get(
+      '/addresses/$addressId',
+      withAuth: true,
+    );
+
+    if (data is Map<String, dynamic>) {
+      return AddressResponse.fromJson(data);
+    }
+
+    if (data is Map) {
+      return AddressResponse.fromJson(
+        Map<String, dynamic>.from(data),
+      );
+    }
+
+    throw Exception('Invalid address response');
+  }
+
+  static Future<AddressResponse> create(AddressRequest request) async {
+    final data = await ApiService.post(
+      '/addresses',
+      request.toJson(),
+      withAuth: true,
+    );
+
+    if (data is Map<String, dynamic>) {
+      return AddressResponse.fromJson(data);
+    }
+
+    if (data is Map) {
+      return AddressResponse.fromJson(
+        Map<String, dynamic>.from(data),
+      );
+    }
+
+    throw Exception('Invalid create address response');
+  }
+
+  static Future<AddressResponse> update(
+    int addressId,
+    AddressRequest request,
+  ) async {
+    final data = await ApiService.put(
+      '/addresses/$addressId',
+      request.toJson(),
+      withAuth: true,
+    );
+
+    if (data is Map<String, dynamic>) {
+      return AddressResponse.fromJson(data);
+    }
+
+    if (data is Map) {
+      return AddressResponse.fromJson(
+        Map<String, dynamic>.from(data),
+      );
+    }
+
+    throw Exception('Invalid update address response');
+  }
+
+  static Future<void> delete(int addressId) async {
+    await ApiService.delete(
+      '/addresses/$addressId',
+      withAuth: true,
+    );
+  }
+}
+
+String _toString(dynamic value) {
+  if (value == null) return '';
+  return value.toString();
+}
+
+int _toInt(dynamic value) {
+  if (value is int) return value;
+  return int.tryParse(value?.toString() ?? '') ?? 0;
 }

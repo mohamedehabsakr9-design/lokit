@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
+import '../../services/api_service.dart';
 import '../rating/rate_experience_dialog.dart';
 
-class OrderDetailsScreen extends StatelessWidget {
+class OrderDetailsScreen extends StatefulWidget {
   final String orderId;
   final bool isCompleted;
 
@@ -13,9 +14,155 @@ class OrderDetailsScreen extends StatelessWidget {
   });
 
   @override
+  State<OrderDetailsScreen> createState() => _OrderDetailsScreenState();
+}
+
+class _OrderDetailsScreenState extends State<OrderDetailsScreen> {
+  bool _isLoading = true;
+  bool _isCancelling = false;
+  String? _error;
+  Map<String, dynamic> _order = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadOrderDetails();
+  }
+
+  String get _cleanOrderId => widget.orderId.replaceAll('#', '');
+
+  Future<void> _loadOrderDetails() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final data = await ApiService.get(
+        '/orders/$_cleanOrderId',
+        withAuth: true,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _order = data is Map ? Map<String, dynamic>.from(data) : {};
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _error = e.toString().replaceFirst('Exception: ', '');
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _cancelOrder(AppStrings s) async {
+    setState(() => _isCancelling = true);
+
+    try {
+      await ApiService.patch(
+        '/orders/$_cleanOrderId/cancel',
+        {},
+        withAuth: true,
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            s.isArabic ? 'تم إلغاء الطلب بنجاح' : 'Order cancelled successfully',
+          ),
+          backgroundColor: Colors.deepOrange,
+        ),
+      );
+
+      _loadOrderDetails();
+    } catch (e) {
+      if (!mounted) return;
+
+      Navigator.pop(context);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString().replaceFirst('Exception: ', '')),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isCancelling = false);
+    }
+  }
+
+  String _readString(String key) {
+    final value = _order[key];
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  String _status(AppStrings s) {
+    final status = _readString('status');
+    if (status.isNotEmpty) return status;
+    return widget.isCompleted ? s.orderStatusCompleted : s.orderStatusPending;
+  }
+
+  bool _isCompleted() {
+    final status = _readString('status').toLowerCase();
+    if (status.isEmpty) return widget.isCompleted;
+
+    return status.contains('completed') ||
+        status.contains('delivered') ||
+        status.contains('done') ||
+        status.contains('paid');
+  }
+
+  String _date() {
+    final value = _readString('createdAt').isNotEmpty
+        ? _readString('createdAt')
+        : _readString('orderDate');
+
+    if (value.isEmpty) return '-';
+
+    return value.replaceFirst('T', ' ').split('.').first;
+  }
+
+  String _paymentMethod(AppStrings s) {
+    final value = _readString('paymentMethod');
+    return value.isEmpty ? s.paymentCashOnDelivery : value;
+  }
+
+  String _phone() {
+    return _readString('phone').isNotEmpty
+        ? _readString('phone')
+        : _readString('customerPhone');
+  }
+
+  String _address() {
+    final direct = _readString('address');
+    if (direct.isNotEmpty) return direct;
+
+    final shippingAddress = _order['shippingAddress'];
+    if (shippingAddress is Map) {
+      return [
+        shippingAddress['city'],
+        shippingAddress['area'],
+        shippingAddress['street'],
+      ].where((e) => e != null && e.toString().isNotEmpty).join(' - ');
+    }
+
+    return '-';
+  }
+
+  @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
+    final completed = _isCompleted();
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -38,177 +185,211 @@ class OrderDetailsScreen extends StatelessWidget {
             ),
           ),
         ),
-        body: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // العنوان والشكر
-              Text(
-                s.orderDetailsThankYouTitle,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                s.orderDetailsThankYouBody,
-                style: const TextStyle(
-                  fontSize: 13,
-                  color: Colors.black54,
-                  height: 1.3,
-                ),
-              ),
-              const SizedBox(height: 16),
+        body: _isLoading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? _ErrorView(
+                    message: _error!,
+                    onRetry: _loadOrderDetails,
+                  )
+                : RefreshIndicator(
+                    onRefresh: _loadOrderDetails,
+                    child: SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            s.orderDetailsThankYouTitle,
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            s.orderDetailsThankYouBody,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: Colors.black54,
+                              height: 1.3,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 8),
 
-              // خط الفاصل
-              const Divider(),
-              const SizedBox(height: 8),
+                          Text(
+                            s.orderDetailsSectionTitle,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
 
-              // قسم بيانات الطلب
-              Text(
-                s.orderDetailsSectionTitle,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
-              _DetailRow(
-                label: s.orderDetailsStatusLabel,
-                value: isCompleted
-                    ? s.orderStatusCompleted
-                    : s.orderStatusPending,
-                valueColor: isCompleted ? Colors.green : Colors.deepOrange,
-                icon: isCompleted ? Icons.check_circle : Icons.schedule,
-              ),
-              _DetailRow(
-                label: s.orderDetailsNumberLabel,
-                value: orderId,
-                icon: Icons.receipt_long_outlined,
-              ),
-              _DetailRow(
-                label: s.orderDetailsDateLabel,
-                value: '5 / 5 / 2025',
-                icon: Icons.calendar_today,
-              ),
-              _DetailRow(
-                label: s.orderDetailsPaymentMethodLabel,
-                value: s.paymentCashOnDelivery,
-                icon: Icons.payment,
-              ),
-              _DetailRow(
-                label: s.orderDetailsPhoneLabel,
-                value: '010336658997',
-                icon: Icons.phone,
-              ),
-              _DetailRow(
-                label: s.orderDetailsAddressLabel,
-                value: 'Cairo - Almaadi - Street 9',
-                icon: Icons.location_on_outlined,
-                isMultiline: true,
-              ),
+                          _DetailRow(
+                            label: s.orderDetailsStatusLabel,
+                            value: _status(s),
+                            valueColor:
+                                completed ? Colors.green : Colors.deepOrange,
+                            icon:
+                                completed ? Icons.check_circle : Icons.schedule,
+                          ),
+                          _DetailRow(
+                            label: s.orderDetailsNumberLabel,
+                            value: widget.orderId,
+                            icon: Icons.receipt_long_outlined,
+                          ),
+                          _DetailRow(
+                            label: s.orderDetailsDateLabel,
+                            value: _date(),
+                            icon: Icons.calendar_today,
+                          ),
+                          _DetailRow(
+                            label: s.orderDetailsPaymentMethodLabel,
+                            value: _paymentMethod(s),
+                            icon: Icons.payment,
+                          ),
+                          _DetailRow(
+                            label: s.orderDetailsPhoneLabel,
+                            value: _phone().isEmpty ? '-' : _phone(),
+                            icon: Icons.phone,
+                          ),
+                          _DetailRow(
+                            label: s.orderDetailsAddressLabel,
+                            value: _address(),
+                            icon: Icons.location_on_outlined,
+                            isMultiline: true,
+                          ),
 
-              // خط الفاصل الثاني
-              const SizedBox(height: 16),
-              const Divider(),
-              const SizedBox(height: 8),
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 8),
 
-              // قسم حالة الطلب (Timeline)
-              Text(
-                s.orderDetailsStatusSectionTitle,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 12),
+                          Text(
+                            s.orderDetailsStatusSectionTitle,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
 
-              // Timeline - تم التأكيد
-              _TimelineItem(
-                dateText: isArabic
-                    ? '16 نوفمبر\n11:00 مساءً'
-                    : 'November 16\n11:00 pm',
-                title: s.timelineConfirmedTitle,
-                subtitle: s.timelineConfirmedBody,
-                isActive: true,
-                icon: Icons.check_circle_outline,
-                iconColor: Colors.green,
-              ),
+                          _TimelineItem(
+                            dateText: _date(),
+                            title: s.timelineConfirmedTitle,
+                            subtitle: s.timelineConfirmedBody,
+                            isActive: true,
+                            icon: Icons.check_circle_outline,
+                            iconColor: Colors.green,
+                          ),
+                          _TimelineItem(
+                            dateText: _date(),
+                            title: s.timelineShippedTitle,
+                            subtitle: s.timelineShippedBody,
+                            isActive: completed,
+                            icon: Icons.local_shipping_outlined,
+                            iconColor: completed ? Colors.green : Colors.grey,
+                          ),
+                          _TimelineItem(
+                            dateText: _date(),
+                            title: s.timelineDeliveredTitle,
+                            subtitle: s.timelineDeliveredBody,
+                            isActive: completed,
+                            isLast: true,
+                            icon: Icons.delivery_dining_outlined,
+                            iconColor: completed ? Colors.green : Colors.grey,
+                          ),
 
-              // Timeline - تم الشحن
-              _TimelineItem(
-                dateText: isArabic
-                    ? '18 نوفمبر\n2:00 مساءً'
-                    : 'November 18\n2:00 pm',
-                title: s.timelineShippedTitle,
-                subtitle: s.timelineShippedBody,
-                isActive: isCompleted,
-                icon: Icons.local_shipping_outlined,
-                iconColor: isCompleted ? Colors.green : Colors.grey,
-              ),
+                          const SizedBox(height: 16),
+                          const Divider(),
+                          const SizedBox(height: 8),
 
-              // Timeline - تم التوصيل
-              _TimelineItem(
-                dateText: isArabic
-                    ? '19 نوفمبر\n4:00 مساءً'
-                    : 'November 19\n4:00 pm',
-                title: s.timelineDeliveredTitle,
-                subtitle: s.timelineDeliveredBody,
-                isActive: isCompleted,
-                isLast: true,
-                icon: Icons.delivery_dining_outlined,
-                iconColor: isCompleted ? Colors.green : Colors.grey,
-              ),
+                          if (completed) ...[
+                            _RateOrderSection(s: s),
+                            const SizedBox(height: 16),
+                          ] else ...[
+                            _CancelOrderSection(
+                              s: s,
+                              isCancelling: _isCancelling,
+                              onCancelConfirmed: () => _cancelOrder(s),
+                            ),
+                            const SizedBox(height: 16),
+                          ],
 
-              const SizedBox(height: 16),
-
-              // خط الفاصل الثالث
-              const Divider(),
-              const SizedBox(height: 8),
-
-              // قسم التقييم أو الإلغاء حسب حالة الطلب
-              if (isCompleted) ...[
-                _RateOrderSection(s: s),
-                const SizedBox(height: 16),
-              ] else ...[
-                _CancelOrderSection(s: s),
-                const SizedBox(height: 16),
-              ],
-
-              // شكر إضافي في النهاية للطلبات المكتملة
-              if (isCompleted) ...[
-                const Divider(),
-                const SizedBox(height: 8),
-                Text(
-                  s.orderDetailsThankYouTitle,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
+                          if (completed) ...[
+                            const Divider(),
+                            const SizedBox(height: 8),
+                            Center(
+                              child: Text(
+                                s.orderDetailsThankYouTitle,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Center(
+                              child: Text(
+                                s.orderDetailsThankYouBody,
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.black54,
+                                  height: 1.3,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  s.orderDetailsThankYouBody,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                    height: 1.3,
-                  ),
-                ),
-              ],
-            ],
-          ),
+      ),
+    );
+  }
+}
+
+class _ErrorView extends StatelessWidget {
+  final String message;
+  final VoidCallback onRetry;
+
+  const _ErrorView({
+    required this.message,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.error_outline, color: Colors.red, size: 44),
+            const SizedBox(height: 12),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Colors.black54),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: onRetry,
+              child: const Text('Try again'),
+            ),
+          ],
         ),
       ),
     );
   }
 }
 
-/// سطر بيانات بسيط مع أيقونة
 class _DetailRow extends StatelessWidget {
   final String label;
   final String value;
@@ -233,11 +414,7 @@ class _DetailRow extends StatelessWidget {
             isMultiline ? CrossAxisAlignment.start : CrossAxisAlignment.center,
         children: [
           if (icon != null) ...[
-            Icon(
-              icon,
-              size: 18,
-              color: Colors.grey[600],
-            ),
+            Icon(icon, size: 18, color: Colors.grey[600]),
             const SizedBox(width: 12),
           ],
           Expanded(
@@ -253,19 +430,15 @@ class _DetailRow extends StatelessWidget {
           ),
           Expanded(
             flex: 6,
-            child: Container(
-              alignment:
-                  isMultiline ? Alignment.topRight : Alignment.centerRight,
-              child: Text(
-                value,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: valueColor ?? Colors.black54,
-                ),
-                textAlign: TextAlign.end,
-                maxLines: isMultiline ? 2 : 1,
-                overflow: isMultiline ? TextOverflow.ellipsis : null,
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                color: valueColor ?? Colors.black54,
               ),
+              textAlign: TextAlign.end,
+              maxLines: isMultiline ? 3 : 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],
@@ -274,7 +447,6 @@ class _DetailRow extends StatelessWidget {
   }
 }
 
-/// عنصر واحد في Timeline
 class _TimelineItem extends StatelessWidget {
   final String dateText;
   final String title;
@@ -296,12 +468,13 @@ class _TimelineItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isArabic = AppStrings.of(context).isArabic;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 20),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // التاريخ والوقت
           SizedBox(
             width: 90,
             child: Text(
@@ -314,8 +487,6 @@ class _TimelineItem extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 8),
-
-          // الخط العمودي + الدائرة
           Column(
             children: [
               Container(
@@ -344,8 +515,6 @@ class _TimelineItem extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 16),
-
-          // المحتوى
           Expanded(
             child: Container(
               padding: const EdgeInsets.all(12),
@@ -364,26 +533,30 @@ class _TimelineItem extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                          color:
-                              isActive ? Colors.green[700] : Colors.black87,
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color:
+                                isActive ? Colors.green[700] : Colors.black87,
+                          ),
                         ),
                       ),
-                      const Spacer(),
-                      if (isActive)
+                      if (isActive) ...[
+                        const SizedBox(width: 8),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
                           decoration: BoxDecoration(
                             color: Colors.green[100],
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Text(
-                            'مكتمل',
+                            isArabic ? 'مكتمل' : 'Done',
                             style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
@@ -391,6 +564,7 @@ class _TimelineItem extends StatelessWidget {
                             ),
                           ),
                         ),
+                      ],
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -412,7 +586,6 @@ class _TimelineItem extends StatelessWidget {
   }
 }
 
-/// قسم التقييم للطلبات المكتملة
 class _RateOrderSection extends StatelessWidget {
   final AppStrings s;
 
@@ -427,11 +600,7 @@ class _RateOrderSection extends StatelessWidget {
       children: [
         Row(
           children: [
-            const Icon(
-              Icons.star,
-              color: Colors.amber,
-              size: 20,
-            ),
+            const Icon(Icons.star, color: Colors.amber, size: 20),
             const SizedBox(width: 8),
             Text(
               s.orderRateSectionTitle,
@@ -455,26 +624,13 @@ class _RateOrderSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Container(
+        SizedBox(
           width: double.infinity,
           height: 48,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Colors.black, Colors.black87],
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.1),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
           child: TextButton(
             onPressed: () async {
               final result = await showRateExperienceDialog(context, s);
-              if (result != null) {
+              if (result != null && context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -488,7 +644,7 @@ class _RateOrderSection extends StatelessWidget {
               }
             },
             style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
+              backgroundColor: Colors.black,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
               ),
@@ -496,11 +652,7 @@ class _RateOrderSection extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                const Icon(
-                  Icons.star,
-                  color: Colors.amber,
-                  size: 18,
-                ),
+                const Icon(Icons.star, color: Colors.amber, size: 18),
                 const SizedBox(width: 8),
                 Text(
                   s.orderRateButton,
@@ -519,11 +671,16 @@ class _RateOrderSection extends StatelessWidget {
   }
 }
 
-/// قسم الإلغاء للطلبات المعلقة
 class _CancelOrderSection extends StatelessWidget {
   final AppStrings s;
+  final bool isCancelling;
+  final VoidCallback onCancelConfirmed;
 
-  const _CancelOrderSection({required this.s});
+  const _CancelOrderSection({
+    required this.s,
+    required this.isCancelling,
+    required this.onCancelConfirmed,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -548,52 +705,54 @@ class _CancelOrderSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        Container(
+        SizedBox(
           width: double.infinity,
           height: 48,
-          decoration: BoxDecoration(
-            color: Colors.deepOrange.withOpacity(0.1),
-            border: Border.all(color: Colors.deepOrange.withOpacity(0.3)),
-            borderRadius: BorderRadius.circular(24),
-          ),
           child: TextButton(
-            onPressed: () {
-              _showCancelConfirmationDialog(context, s);
-            },
+            onPressed: isCancelling
+                ? null
+                : () => _showCancelConfirmationDialog(context),
             style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
+              backgroundColor: Colors.deepOrange.withOpacity(0.1),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(24),
+                side: BorderSide(
+                  color: Colors.deepOrange.withOpacity(0.3),
+                ),
               ),
             ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(
-                  Icons.cancel_outlined,
-                  color: Colors.deepOrange,
-                  size: 18,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  s.orderCancelButton,
-                  style: const TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.deepOrange,
+            child: isCancelling
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(
+                        Icons.cancel_outlined,
+                        color: Colors.deepOrange,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        s.orderCancelButton,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ],
     );
   }
 
-  void _showCancelConfirmationDialog(BuildContext context, AppStrings s) {
-    final isArabic = s.isArabic;
-
+  void _showCancelConfirmationDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
@@ -606,10 +765,10 @@ class _CancelOrderSection extends StatelessWidget {
               size: 24,
             ),
             const SizedBox(width: 12),
-            Text(
-              s.orderCancelDialogTitle,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
+            Expanded(
+              child: Text(
+                s.orderCancelDialogTitle,
+                style: const TextStyle(fontWeight: FontWeight.w700),
               ),
             ),
           ],
@@ -627,20 +786,7 @@ class _CancelOrderSection extends StatelessWidget {
             ),
           ),
           ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              // TODO: استدعاء API إلغاء الطلب
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(
-                    isArabic
-                        ? 'تم إلغاء الطلب بنجاح'
-                        : 'Order cancelled successfully',
-                  ),
-                  backgroundColor: Colors.deepOrange,
-                ),
-              );
-            },
+            onPressed: onCancelConfirmed,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.deepOrange,
               shape: RoundedRectangleBorder(

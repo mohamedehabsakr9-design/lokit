@@ -1,4 +1,3 @@
-// profile_menu_screen.dart
 import 'package:flutter/material.dart';
 import '../../main.dart';
 import 'edit_profile_screen.dart';
@@ -8,10 +7,11 @@ import '../auth/sign_in_screen.dart';
 import '../legal/about_screen.dart';
 import '../legal/privacy_policy_screen.dart';
 import '../support/support_chat_screen.dart';
+import '../orders/my_orders_screen.dart';
 import '../../app/app_strings.dart';
 import '../../services/auth_service.dart';
+import '../../services/api_service.dart';
 
-// الشاشات المرتبطة بالـ Bottom Bar
 import '../home/home_screen.dart';
 import '../products/search_screen.dart';
 import '../wishlist/wishlist_screen.dart';
@@ -37,11 +37,60 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
   String _selectedLanguage = 'English';
   bool _replicate = false;
   bool _isLoggingOut = false;
+  bool _isLoadingProfile = true;
+
+  String _name = '';
+  String _email = '';
+  String? _avatarUrl;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _name = widget.userName ?? '';
+    _email = widget.userEmail ?? '';
+    _avatarUrl = widget.avatarUrl;
+
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    try {
+      final data = await ApiService.get(
+        '/account',
+        withAuth: true,
+      );
+
+      if (!mounted) return;
+
+      if (data is Map) {
+        final firstName = _readString(data, 'firstName');
+        final lastName = _readString(data, 'lastName');
+        final fullName = _readString(data, 'name');
+
+        setState(() {
+          _name = fullName.isNotEmpty
+              ? fullName
+              : '$firstName $lastName'.trim();
+
+          _email = _readString(data, 'email');
+          _avatarUrl = _readString(data, 'avatarUrl').isNotEmpty
+              ? _readString(data, 'avatarUrl')
+              : _readString(data, 'profileImage');
+
+          _isLoadingProfile = false;
+        });
+      } else {
+        setState(() => _isLoadingProfile = false);
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoadingProfile = false);
+    }
+  }
 
   Future<void> _logout() async {
-    setState(() {
-      _isLoggingOut = true;
-    });
+    setState(() => _isLoggingOut = true);
 
     await AuthService.logout();
 
@@ -49,11 +98,15 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
 
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(
-        builder: (_) => const SignInScreen(),
-      ),
+      MaterialPageRoute(builder: (_) => const SignInScreen()),
       (route) => false,
     );
+  }
+
+  String _readString(Map data, String key) {
+    final value = data[key];
+    if (value == null) return '';
+    return value.toString();
   }
 
   @override
@@ -63,9 +116,6 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
     final isArabic = locale.languageCode == 'ar';
 
     _selectedLanguage = isArabic ? 'Arabic' : 'English';
-
-    final String name = widget.userName ?? '';
-    final String email = widget.userEmail ?? '';
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
@@ -86,10 +136,10 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
                   CircleAvatar(
                     radius: 26,
                     backgroundColor: Colors.white,
-                    backgroundImage: widget.avatarUrl != null
-                        ? NetworkImage(widget.avatarUrl!)
+                    backgroundImage: _avatarUrl != null && _avatarUrl!.isNotEmpty
+                        ? NetworkImage(_avatarUrl!)
                         : null,
-                    child: widget.avatarUrl == null
+                    child: _avatarUrl == null || _avatarUrl!.isEmpty
                         ? const Icon(
                             Icons.person,
                             color: Colors.black54,
@@ -99,46 +149,57 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name.isEmpty ? '' : name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
+                    child: _isLoadingProfile
+                        ? const Text(
+                            'Loading...',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                            ),
+                          )
+                        : Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                _name.isEmpty ? 'User' : _name,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                _email.isEmpty ? 'user@email.com' : _email,
+                                style: const TextStyle(
+                                  color: Color(0xFFCBD5E1),
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
                           ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          email.isEmpty ? '' : email,
-                          style: const TextStyle(
-                            color: Color(0xFFCBD5E1),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF11181F),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 1),
-                    ),
-                    child: const Icon(
-                      Icons.sync,
-                      color: Colors.white,
-                      size: 18,
+                  InkWell(
+                    onTap: _loadProfile,
+                    customBorder: const CircleBorder(),
+                    child: Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF11181F),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1),
+                      ),
+                      child: const Icon(
+                        Icons.sync,
+                        color: Colors.white,
+                        size: 18,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
-
             Expanded(
               child: ListView(
                 children: [
@@ -159,13 +220,15 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
                   _ProfileTile(
                     icon: Icons.edit_outlined,
                     title: s.profileEditProfile,
-                    onTap: () {
-                      Navigator.push(
+                    onTap: () async {
+                      await Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const EditProfileScreen(),
                         ),
                       );
+
+                      _loadProfile();
                     },
                   ),
 
@@ -173,7 +236,12 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
                     icon: Icons.shopping_bag_outlined,
                     title: s.profileMyOrders,
                     onTap: () {
-                      // TODO: افتح شاشة الطلبات
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const MyOrdersScreen(),
+                        ),
+                      );
                     },
                   ),
 
@@ -390,9 +458,13 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
                                   color: Colors.white,
                                 ),
                               )
-                            : const Icon(Icons.logout),
+                            : const Icon(
+                                Icons.logout,
+                                color: Colors.white,
+                              ),
                         label: Text(
                           _isLoggingOut ? 'Logging out...' : s.profileLogout,
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                     ),
@@ -416,7 +488,6 @@ class _ProfileMenuScreenState extends State<ProfileMenuScreen> {
             ),
           ],
         ),
-
         bottomNavigationBar: SafeArea(
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 0, 16, 16),

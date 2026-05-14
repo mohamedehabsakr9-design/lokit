@@ -1,4 +1,3 @@
-// sign_in_screen.dart
 import 'package:flutter/material.dart';
 import 'sign_up_screen.dart';
 import 'forget_password_screen.dart';
@@ -32,47 +31,56 @@ class _SignInScreenState extends State<SignInScreen> {
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter email and password')),
-      );
+      _showMessage('Please enter email and password');
+      return;
+    }
+
+    if (!email.contains('@')) {
+      _showMessage('Please enter a valid email');
       return;
     }
 
     setState(() => _isLoading = true);
 
     try {
-      final data = await AuthService.login(email: email, password: password);
+      final data = await AuthService.login(
+        email: email,
+        password: password,
+      );
 
       if (!mounted) return;
 
-      // ✅ نتحقق إن الـ token اتحفظ فعلاً
       final token = await AuthService.getToken();
 
       if (token != null && token.isNotEmpty) {
-        // ✅ login ناجح — روح للهوم
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
           MaterialPageRoute(
-            builder: (_) => const HomeScreen(showSuccess: true),
+            builder: (_) => const HomeScreen(),
           ),
+          (route) => false,
         );
       } else {
-        // ❌ الـ backend ما رجعش token — اطبع الـ response للـ debug
         debugPrint('Login response: $data');
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Login failed: No token received from server'),
-          ),
-        );
+        _showMessage('Login failed: No token received from server');
       }
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Login failed: $e')),
+
+      _showMessage(
+        e.toString().replaceFirst('Exception: ', ''),
       );
     } finally {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
+  }
+
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
   }
 
   @override
@@ -127,7 +135,9 @@ class _SignInScreenState extends State<SignInScreen> {
                         const SizedBox(height: 8),
                         TextField(
                           controller: _emailController,
+                          enabled: !_isLoading,
                           keyboardType: TextInputType.emailAddress,
+                          textInputAction: TextInputAction.next,
                           decoration: InputDecoration(
                             hintText: s.signInEmailHint,
                             prefixIcon: const Icon(Icons.mail_outline),
@@ -166,7 +176,12 @@ class _SignInScreenState extends State<SignInScreen> {
                         const SizedBox(height: 4),
                         TextField(
                           controller: _passwordController,
+                          enabled: !_isLoading,
                           obscureText: _obscurePassword,
+                          textInputAction: TextInputAction.done,
+                          onSubmitted: (_) {
+                            if (!_isLoading) _login();
+                          },
                           decoration: InputDecoration(
                             hintText: s.signInPasswordHint,
                             prefixIcon: const Icon(Icons.lock_outline),
@@ -176,11 +191,13 @@ class _SignInScreenState extends State<SignInScreen> {
                                     ? Icons.visibility
                                     : Icons.visibility_off,
                               ),
-                              onPressed: () {
-                                setState(() {
-                                  _obscurePassword = !_obscurePassword;
-                                });
-                              },
+                              onPressed: _isLoading
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
                             ),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(10),
@@ -197,6 +214,7 @@ class _SignInScreenState extends State<SignInScreen> {
                             onPressed: _isLoading ? null : _login,
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.black87,
+                              disabledBackgroundColor: Colors.black45,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -212,7 +230,10 @@ class _SignInScreenState extends State<SignInScreen> {
                                   )
                                 : Text(
                                     s.signInButton,
-                                    style: const TextStyle(fontSize: 16),
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white,
+                                    ),
                                   ),
                           ),
                         ),
@@ -238,19 +259,19 @@ class _SignInScreenState extends State<SignInScreen> {
                             _SocialButton(
                               label: s.signInGoogle,
                               icon: Icons.g_mobiledata,
-                              onTap: () {},
+                              onTap: _isLoading ? null : () {},
                             ),
                             const SizedBox(width: 12),
                             _SocialButton(
                               label: s.signInFacebook,
                               icon: Icons.facebook,
-                              onTap: () {},
+                              onTap: _isLoading ? null : () {},
                             ),
                             const SizedBox(width: 12),
                             _SocialButton(
                               label: s.signInApple,
                               icon: Icons.apple,
-                              onTap: () {},
+                              onTap: _isLoading ? null : () {},
                             ),
                           ],
                         ),
@@ -301,7 +322,7 @@ class _SignInScreenState extends State<SignInScreen> {
 class _SocialButton extends StatelessWidget {
   final String label;
   final IconData icon;
-  final VoidCallback onTap;
+  final VoidCallback? onTap;
 
   const _SocialButton({
     required this.label,
@@ -315,7 +336,10 @@ class _SocialButton extends StatelessWidget {
       child: OutlinedButton.icon(
         onPressed: onTap,
         icon: Icon(icon, size: 18),
-        label: Text(label),
+        label: Text(
+          label,
+          overflow: TextOverflow.ellipsis,
+        ),
         style: OutlinedButton.styleFrom(
           padding: const EdgeInsets.symmetric(vertical: 10),
           shape: RoundedRectangleBorder(

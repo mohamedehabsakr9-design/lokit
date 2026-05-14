@@ -3,10 +3,13 @@ import 'package:flutter/material.dart';
 import '../../app/app_strings.dart';
 import '../../core/models/product_search_model.dart';
 import '../../core/services/search_service.dart';
+import '../cart/my_cart_screen.dart';
 import '../home/home_screen.dart';
 import '../profile/profile_menu_screen.dart';
 import '../wishlist/wishlist_screen.dart';
 import 'product_details_screen.dart';
+
+const String kBaseUrl = 'https://lokit-production.up.railway.app';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -18,7 +21,6 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   final SearchService _searchService = SearchService();
 
-  // Search
   String _query = '';
   bool _isLoading = false;
   bool _hasSearched = false;
@@ -26,7 +28,6 @@ class _SearchScreenState extends State<SearchScreen> {
   List<ProductSearchModel> _results = [];
   DateTime? _lastTyped;
 
-  // Filters
   int? _selectedBrandId;
   int? _selectedCategoryId;
   int? _selectedColorId;
@@ -37,11 +38,12 @@ class _SearchScreenState extends State<SearchScreen> {
   void _onQueryChanged(String value) {
     setState(() {
       _query = value;
+
       if (_query.trim().isEmpty) {
         _hasSearched = false;
         _results = [];
         _errorMessage = null;
-        return;
+        _isLoading = false;
       }
     });
 
@@ -49,8 +51,11 @@ class _SearchScreenState extends State<SearchScreen> {
 
     final typed = DateTime.now();
     _lastTyped = typed;
+
     Future.delayed(const Duration(milliseconds: 600), () {
-      if (_lastTyped == typed && mounted) _performSearch();
+      if (_lastTyped == typed && mounted) {
+        _performSearch();
+      }
     });
   }
 
@@ -64,66 +69,73 @@ class _SearchScreenState extends State<SearchScreen> {
 
     try {
       final results = await _searchService.searchProducts(
-        keyword:    _query.trim(),
-        brandId:    _selectedBrandId,
+        keyword: _query.trim(),
+        brandId: _selectedBrandId,
         categoryId: _selectedCategoryId,
-        colorId:    _selectedColorId,
-        sizeId:     _selectedSizeId,
-        minPrice:   _minPrice,
-        maxPrice:   _maxPrice,
+        colorId: _selectedColorId,
+        sizeId: _selectedSizeId,
+        minPrice: _minPrice,
+        maxPrice: _maxPrice,
       );
 
       if (!mounted) return;
+
       setState(() {
-        _results     = results;
+        _results = results;
         _hasSearched = true;
-        _isLoading   = false;
+        _isLoading = false;
       });
     } on DioException catch (e) {
       if (!mounted) return;
+
       setState(() {
-        _isLoading    = false;
-        _hasSearched  = true;
-        _errorMessage = e.response?.data?['message'] as String?
-            ?? 'Connection error. Please try again.';
+        _isLoading = false;
+        _hasSearched = true;
+        _errorMessage = e.response?.data is Map
+            ? e.response?.data['message']?.toString()
+            : 'Connection error. Please try again.';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+
       setState(() {
-        _isLoading    = false;
-        _hasSearched  = true;
-        _errorMessage = 'Something went wrong.';
+        _isLoading = false;
+        _hasSearched = true;
+        _errorMessage = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final s       = AppStrings.of(context);
+    final s = AppStrings.of(context);
     final isArabic = Localizations.localeOf(context).languageCode == 'ar';
 
     return Directionality(
       textDirection: isArabic ? TextDirection.rtl : TextDirection.ltr,
       child: Scaffold(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFFF7F7F7),
         appBar: AppBar(
-          backgroundColor: Colors.white,
-          elevation: 0.3,
+          backgroundColor: const Color(0xFFF7F7F7),
+          elevation: 0,
           centerTitle: true,
           title: Text(
             s.searchTitle,
             style: const TextStyle(
               color: Colors.black,
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
+              fontSize: 20,
+              fontWeight: FontWeight.w800,
             ),
           ),
         ),
         body: Column(
           children: [
             const SizedBox(height: 8),
-            _SearchBarWidget(onQueryChanged: _onQueryChanged),
-            const SizedBox(height: 16),
+            _SearchBarWidget(
+              onQueryChanged: _onQueryChanged,
+              onSubmitted: (_) => _performSearch(),
+            ),
+            const SizedBox(height: 12),
             Expanded(child: _buildBody(s)),
           ],
         ),
@@ -136,14 +148,17 @@ class _SearchScreenState extends State<SearchScreen> {
     if (!_hasSearched && !_isLoading) {
       return _EmptyState(title: s.searchExploreNow, isError: false);
     }
+
     if (_isLoading) {
       return const Center(
         child: CircularProgressIndicator(color: Colors.black),
       );
     }
+
     if (_errorMessage != null) {
       return _EmptyState(title: _errorMessage!, isError: true);
     }
+
     if (_results.isEmpty) {
       return _EmptyState(title: s.searchNoResults, isError: true);
     }
@@ -155,7 +170,10 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Text(
             '${s.searchResultsTitle} (${_results.length})',
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(height: 12),
           Expanded(
@@ -163,12 +181,13 @@ class _SearchScreenState extends State<SearchScreen> {
               itemCount: _results.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
-                childAspectRatio: 3 / 4.6,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
+                childAspectRatio: 0.62,
+                mainAxisSpacing: 14,
+                crossAxisSpacing: 14,
               ),
-              itemBuilder: (context, index) =>
-                  _ProductCard(product: _results[index]),
+              itemBuilder: (context, index) {
+                return _ProductCard(product: _results[index]);
+              },
             ),
           ),
         ],
@@ -198,11 +217,13 @@ class _SearchScreenState extends State<SearchScreen> {
             _NavItem(
               icon: Icons.home_filled,
               label: 'Home',
-              onTap: () => Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const HomeScreen()),
-                (r) => false,
-              ),
+              onTap: () {
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(builder: (_) => const HomeScreen()),
+                  (route) => false,
+                );
+              },
             ),
             _NavItem(
               icon: Icons.search,
@@ -213,23 +234,32 @@ class _SearchScreenState extends State<SearchScreen> {
             _NavItem(
               icon: Icons.favorite_border,
               label: 'Wishlist',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const WishlistScreen()),
-              ),
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const WishlistScreen()),
+                );
+              },
             ),
             _NavItem(
               icon: Icons.shopping_bag_outlined,
               label: 'Cart',
-              onTap: () {},
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const MyCartScreen()),
+                );
+              },
             ),
             _NavItem(
               icon: Icons.person_outline,
               label: 'Profile',
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ProfileMenuScreen()),
-              ),
+              onTap: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ProfileMenuScreen()),
+                );
+              },
             ),
           ],
         ),
@@ -238,31 +268,37 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// ─── Search Bar ───────────────────────────────────────────────────────────────
-
 class _SearchBarWidget extends StatelessWidget {
   final ValueChanged<String> onQueryChanged;
-  const _SearchBarWidget({required this.onQueryChanged});
+  final ValueChanged<String> onSubmitted;
+
+  const _SearchBarWidget({
+    required this.onQueryChanged,
+    required this.onSubmitted,
+  });
 
   @override
   Widget build(BuildContext context) {
     final s = AppStrings.of(context);
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: BorderRadius.circular(26),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              blurRadius: 12,
+              offset: const Offset(0, 5),
             ),
           ],
         ),
         child: TextField(
           onChanged: onQueryChanged,
+          onSubmitted: onSubmitted,
+          textInputAction: TextInputAction.search,
           decoration: InputDecoration(
             hintText: s.searchHint,
             prefixIcon: const Icon(Icons.search, color: Colors.black54),
@@ -278,52 +314,57 @@ class _SearchBarWidget extends StatelessWidget {
   }
 }
 
-// ─── Product Card ─────────────────────────────────────────────────────────────
-
 class _ProductCard extends StatelessWidget {
   final ProductSearchModel product;
+
   const _ProductCard({required this.product});
 
   @override
   Widget build(BuildContext context) {
+    final imageUrl = _fullImageUrl(product.imageUrl);
+
     return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ProductDetailsScreen(productId: product.id),
-        ),
-      ),
+      borderRadius: BorderRadius.circular(22),
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ProductDetailsScreen(productId: product.id),
+          ),
+        );
+      },
       child: Container(
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 4),
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── صورة ──────────────────────────────
             Stack(
               children: [
                 ClipRRect(
                   borderRadius: const BorderRadius.vertical(
-                    top: Radius.circular(18),
+                    top: Radius.circular(22),
                   ),
-                  child: AspectRatio(
-                    aspectRatio: 3 / 4,
-                    child: product.imageUrl != null
-                        ? Image.network(
-                            product.imageUrl!,
+                  child: SizedBox(
+                    height: 175,
+                    width: double.infinity,
+                    child: imageUrl == null
+                        ? _placeholder()
+                        : Image.network(
+                            imageUrl,
                             fit: BoxFit.cover,
-                            loadingBuilder: (ctx, child, progress) {
+                            loadingBuilder: (context, child, progress) {
                               if (progress == null) return child;
+
                               return Container(
                                 color: Colors.grey[100],
                                 child: const Center(
@@ -335,56 +376,63 @@ class _ProductCard extends StatelessWidget {
                               );
                             },
                             errorBuilder: (_, __, ___) => _placeholder(),
-                          )
-                        : _placeholder(),
+                          ),
                   ),
                 ),
                 Positioned(
-                  top: 8,
-                  right: 8,
+                  top: 10,
+                  right: 10,
                   child: Container(
-                    width: 30,
-                    height: 30,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.95),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.favorite_border, size: 18),
+                    child: const Icon(Icons.favorite_border, size: 19),
                   ),
                 ),
               ],
             ),
-            // ── اسم ───────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
-              child: Text(
-                product.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-            // ── براند · كاتيجوري ──────────────────
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              child: Text(
-                '${product.brandName} · ${product.categoryName}',
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 11, color: Colors.black54),
-              ),
-            ),
-            // ── سعر ───────────────────────────────
-            Padding(
-              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-              child: Text(
-                'From \$${product.minPrice.toStringAsFixed(2)}',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      product.brandName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Expanded(
+                      child: Text(
+                        product.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          height: 1.25,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      '${product.minPrice.toStringAsFixed(2)} EGP',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -402,22 +450,32 @@ class _ProductCard extends StatelessWidget {
       ),
     );
   }
-}
 
-// ─── Empty State ──────────────────────────────────────────────────────────────
+  String? _fullImageUrl(String? url) {
+    if (url == null || url.isEmpty) return null;
+    if (url.startsWith('http')) return url;
+    if (url.startsWith('/')) return '$kBaseUrl$url';
+    return '$kBaseUrl/$url';
+  }
+}
 
 class _EmptyState extends StatelessWidget {
   final String title;
   final bool isError;
-  const _EmptyState({required this.title, required this.isError});
+
+  const _EmptyState({
+    required this.title,
+    required this.isError,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const SizedBox(height: 130),
+        Center(
+          child: Container(
             width: 130,
             height: 130,
             decoration: const BoxDecoration(
@@ -430,18 +488,19 @@ class _EmptyState extends StatelessWidget {
               color: isError ? Colors.redAccent : Colors.black54,
             ),
           ),
-          const SizedBox(height: 16),
-          Text(
+        ),
+        const SizedBox(height: 16),
+        Center(
+          child: Text(
             title,
+            textAlign: TextAlign.center,
             style: const TextStyle(fontSize: 14, color: Colors.black87),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
-
-// ─── Nav Item ─────────────────────────────────────────────────────────────────
 
 class _NavItem extends StatelessWidget {
   final IconData icon;
@@ -459,6 +518,7 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final color = isActive ? Colors.black : Colors.grey;
+
     return InkWell(
       borderRadius: BorderRadius.circular(20),
       onTap: onTap,
